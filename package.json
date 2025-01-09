@@ -1,0 +1,49 @@
+{
+  "name": "dbconnectortoolkit",
+  "version": "0.0.1",
+  "description": "This module provides an integrated tool to connect database under different settings",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "mocha --require ts-node/register 'test/**/*.spec.ts'",
+    "coverage": "nyc --reporter=text --reporter=html npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zx2486/DBConnectorToolkit.git"
+  },
+  "keywords": [
+    "postgresql",
+    "sql",
+    "db",
+    "pg",
+    "database"
+  ],
+  "author": "zx2486",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/zx2486/DBConnectorToolkit/issues"
+  },
+  "homepage": "https://github.com/zx2486/DBConnectorToolkit#readme",
+  "dependencies": {
+    "@types/bunyan": "^1.8.11",
+    "@types/pg": "^8.11.10",
+    "bunyan": "^1.8.15",
+    "globals": "^15.12.0",
+    "pg": "^8.13.1",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@istanbuljs/nyc-config-typescript": "^1.0.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint-config-airbnb": "^19.0.4",
+    "mocha": "^11.0.1",
+    "nyc": "^17.1.0",
+    "source-map-support": "^0.5.21",
+    "ts-node": "^10.9.2",
+    "ts-sinon": "^2.0.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,5 +1,15 @@
 # DBConnectorToolkit
-This module provides a integrated tool to connect database under different settings, single db, master and slave, with redis cache, and use message queue to collect writes for central processing.
+This module provides an integrated tool to connect database under different settings, single db, master with read replica, with redis for caching, and use message queue to collect writes for central processing.
+
+## Installation
+```bash
+# Include installation commands here
+
+```
+
+## Sample use case
+The easiest one, just input connection string and call connect()
+
 
 ## Description
 When we learn programming and read / write data to SQL database, we use libraries like node-postgres and interacts with master database directly.
@@ -16,12 +26,7 @@ All caching logic is handled inside this module.
 It is different from existing libraries like sequelize-redis-cache as this involves different caching logics and also the write part.
 
 
-## Installation
 
-```bash
-# Include installation commands here
-
-```
 
 ## Usage
 This module will support the following caching arrangements
