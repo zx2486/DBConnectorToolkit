@@ -75,6 +75,7 @@ If data should come from database instead of cache, set _getLatest to false.
 
 ## Running queries
 For details, please read the documentations.
+
 The most basic one, running raw queries:
 ```typescript
 /**
@@ -93,6 +94,7 @@ query(_query: Query, _isWrite?: boolean, _getLatest?: boolean): Promise<QueryRes
 ```
 
 Five different methods, select, insert, update, upsert, delete. 
+
 All write methods will return * at the end
 ```typescript
 select(
@@ -190,6 +192,7 @@ It is different from existing libraries like sequelize-redis-cache as this invol
 
 ## Contributing
 If you want to contribute to this project, please submit a pull request or create an issue for discussion. 
+
 Working on README / documentations are also welcomed.
 
 
@@ -198,5 +201,7 @@ Please open an issue on github.
 
 ## Funding
 You may buy me a coffee.
+
 BTC: bc1qgl8g2xu3f60lkxgzg80jvykkmf3gywaky3c2tt
+
 ETH / BNB / POL (pologon): 0xA5BC03ddc951966B0Df385653fA5b7CAdF1fc3DA
