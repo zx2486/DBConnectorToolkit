@@ -39,7 +39,7 @@ try {
 }
 ```
 
-Now suppose your application should only have 1-10 concurrent collections to database (so it will not blow up)
+Now suppose your application should only have 1-10 concurrent connections to database (so it will not blow up)
 ```typescript
 const masterDBConfig2 = {
     ...masterDBConfig,
