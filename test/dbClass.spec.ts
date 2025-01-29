@@ -4,7 +4,7 @@ import {
 } from 'mocha'
 import sinon from 'ts-sinon'
 import { Pool } from 'pg'
-import { PgClass } from '../src/dbClass' // Adjust the path as needed
+import PgClass from '../src/dbClass' // Adjust the path as needed
 
 const selectCases = [
   {

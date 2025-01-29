@@ -1,5 +1,6 @@
-import type { Query, QueryResult } from './baseClass.ts'
-import { DBClass } from './dbClass'
+import type {
+  Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
+} from './baseClass.ts'
 
 import { CacheClass } from './redisClass'
 
@@ -42,28 +43,30 @@ export default class DBConnectorClass {
   }
 
   buildSelectQuery(
-    _table: { table: string, join_type?: 'INNER' | 'LEFT' | 'RIGHT', name?: string, on?: { left: string, right: string }[] }[],
+    _table: TableWithJoin[],
     _fields: string[],
-    _conditions?: { array: { field: string, comparator?: string, value: any }[], is_or: boolean },
-    _order?: { field: string, is_asc: boolean }[],
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+    _order?: QueryOrder[],
     _limit?: number,
     _offset?: number,
   ): Query {
     return this.masterDB.buildSelectQuery(_table, _fields, _conditions, _order, _limit, _offset)
   }
 
-  async query(_query: Query, _isWrite: boolean = false, _isCache: boolean = true) {
+  async query(_query: Query, _isWrite: boolean = false, _getLatest: boolean = false) {
     if (_isWrite) {
       return this.masterDB.query(_query, _isWrite)
     }
+    // All read should be done from replica if available
     const db = (this.replicaDB) ? this.replicaDB : this.masterDB
-    const cacheResult: QueryResult = (this.redis && this.redis.isconnect() && _isCache)
-      ? await this.redis.query(_query) : { rows: [], count: 0, ttl: undefined }
-    if (!_isCache || !cacheResult || cacheResult.ttl === undefined) {
+    const cacheResult: QueryResult | undefined = (
+      this.redis && await this.redis.isconnect() && !_getLatest
+    ) ? await this.redis.query(_query) : undefined
+    if (_getLatest || !cacheResult || cacheResult?.ttl === undefined) {
       // if there is no cache, query to db
       const result: QueryResult = await db.query(_query)
-      if (_isCache && result) {
-        if (this.redis && this.redis.isconnect()) {
+      if (!_getLatest && result) {
+        if (this.redis && await this.redis.isconnect()) {
           // save result into cache in background
           this.redis.buildCache(_query, result)
         }
@@ -77,24 +80,39 @@ export default class DBConnectorClass {
     return cacheResult
   }
 
-  /* async select(_query: Query) {
-    return this.masterDB.select(_query)
+  async select(
+    _table: TableWithJoin[],
+    _fields: string[],
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+    _order?: QueryOrder[],
+    _limit?: number,
+    _offset?: number,
+    _getLatest?: boolean,
+  ) {
+    const query = this.buildSelectQuery(_table, _fields, _conditions, _order, _limit, _offset)
+    return this.query(query, false, _getLatest)
   }
 
-  async insert(_query: Query) {
-    return this.masterDB.insert(_query)
+  async insert(_table: string, _data: QueryData[]) {
+    return this.masterDB.insert(_table, _data)
   }
 
-  async update(_query: Query) {
-    return this.masterDB.update(_query)
+  async update(
+    _table: string,
+    _data: QueryData[],
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+  ) {
+    return this.masterDB.update(_table, _data, _conditions)
   }
 
-  async upsert(_query: Query) {
-    return this.masterDB.upsert(_query)
+  async upsert(_table: string, _indexData: string[], _data: QueryData[]) {
+    return this.masterDB.upsert(_table, _indexData, _data)
   }
 
-  async delete(_query: Query) {
-    return this.masterDB.delete(_query)
+  async delete(
+    _table: string,
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+  ) {
+    return this.masterDB.delete(_table, _conditions)
   }
-  */
 }

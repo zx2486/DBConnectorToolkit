@@ -1,5 +1,5 @@
-import type { DBConfig, CacheConfig } from './baseClass.ts'
-import { PgClass, DBClass } from './dbClass'
+import type { DBConfig, CacheConfig, DBClass } from './baseClass.ts'
+import PgClass from './dbClass'
 
 import { RedisClass } from './redisClass'
 
@@ -21,8 +21,10 @@ const dbConnector = (
     throw new Error('Master DB config is required and must be a PostgreSQL config')
   }
   const masterDB = new PgClass(masterConfig)
-  const replicaDB = (replicaConfig) ? new PgClass(replicaConfig) : undefined
-  const redis = (redisConfig) ? new RedisClass(redisConfig) : undefined
+  const replicaDB = (replicaConfig && replicaConfig.client === 'pg')
+    ? new PgClass(replicaConfig) : undefined
+  const redis = (redisConfig && redisConfig.client === 'redis')
+    ? new RedisClass(redisConfig) : undefined
 
   return new DBConnectorClass(masterDB, replicaDB, redis)
 }

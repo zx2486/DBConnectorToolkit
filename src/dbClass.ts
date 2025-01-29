@@ -1,58 +1,20 @@
 import bunyan from 'bunyan'
 import uuid from 'uuid'
 import { Pool } from 'pg'
-import type { Query, QueryResult, DBConfig } from './baseClass.ts'
+import type {
+  Query, DBConfig, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
+} from './baseClass.ts'
 
-type TableWithJoin = {
-  table: string,
-  join_type?: string,
-  name?: string,
-  on?: { left: string, right: string }[]
-}
-type QueryData = { field: string, value: any }
-type QueryCondition = { field: string, comparator?: string, value: any }
-type QueryOrder = { field: string, is_asc: boolean }
-
-// Basic DBClass interface, all objects connecting to a database should implement this
-export interface DBClass {
-  connect(): Promise<void>
-  disconnect(): Promise<void>
-  isconnect(): Promise<boolean>
-  query(_query: Query, _isWrite?: boolean, _getLatest?: boolean): Promise<QueryResult>
-  buildSelectQuery(
-    _table: TableWithJoin[],
-    _fields: string[],
-    _conditions?: { array: QueryCondition[], is_or: boolean },
-    _order?: QueryOrder[],
-    _limit?: number,
-    _offset?: number
-  ): Query
-  select(
-    _table: TableWithJoin[],
-    _fields: string[],
-    _conditions?: { array: QueryCondition[], is_or: boolean },
-    _order?: QueryOrder[],
-    _limit?: number,
-    _offset?: number,
-    _getLatest?: boolean
-  ): Promise<QueryResult>
-  insert(_table: string, _data: QueryData[]): Promise<QueryResult>
-  update(_table: string, _data: QueryData[],
-    _conditions?: { array: QueryCondition[], is_or: boolean }
-  ): Promise<QueryResult>
-  upsert(_table: string, _indexData: string[], _data: QueryData[]): Promise<QueryResult>
-  delete(_table: string,
-    _conditions?: { array: QueryCondition[], is_or: boolean }
-  ): Promise<QueryResult>
-}
-
-export class PgClass implements DBClass {
+export default class PgClass implements DBClass {
   private dbConfig: DBConfig
   private pool: any
   private clients: { [key: string]: any } = {}
   private logger: any
 
   constructor(dbConfig: DBConfig) {
+    if (!dbConfig || dbConfig.client !== 'pg' || !dbConfig.endpoint || !dbConfig.port || !dbConfig.database || !dbConfig.username || !dbConfig.password) {
+      throw new Error('Invalid DB config')
+    }
     this.dbConfig = dbConfig
     this.logger = bunyan.createLogger({
       name: 'PgClass',

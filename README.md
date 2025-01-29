@@ -1,17 +1,178 @@
 # DBConnectorToolkit
-This module provides an integrated tool to connect database under different settings, single db, master with read replica, with redis for caching, and use message queue to collect writes for central processing.
+This module provides an integrated tool to connect database under different settings, single db, master with read replica, with redis for caching, and use message queue to centralize db writes requests.
+The main purpose is to reduce code changes when the application has growing traffic and been upgrading in infra.
 
 ## Installation
 ```bash
 # Include installation commands here
-
+npm install dbconnectortoolkit
 ```
 
 ## Sample use case
-The easiest one, just input connection string and call connect()
+Suppose you have a postgres database (web) and would like to select data from it.
+```typescript
+import { DBConnectorClass } from 'dbconnectortoolkit'
 
+const masterDBConfig = {
+  client: 'pg',
+  endpoint: 'localhost',
+  port: 5432,
+  username: 'your_username',
+  password: 'your_password',
+  database: 'web',
+}
+const dbConnector = new DBConnectorClass(masterDBConfig)
+try {
+    await dbConnector.connect()
+    // Select all data from the users table
+    const result = await dbConnector.select(
+        [{ table: 'users' }],
+        ['*']
+    )
+    console.log('Data from users table:', result)
+    // also have insert, update, upsert, delete methods and query method for raw queries
+} catch (err) {
+    // throw when database cannot login or something wrong with the query
+    console.error('Error:', err)
+} finally {
+    await dbConnector.disconnect()
+}
+```
 
-## Description
+Now suppose your application should only have 1-10 concurrent collections to database (so it will not blow up)
+```typescript
+const masterDBConfig2 = {
+    ...masterDBConfig,
+    minConnection: 1,
+    maxConnection: 10
+}
+```
+Done.
+
+Now your application is getting great, your lead asks you to use replica database for read queries. Instead of rewriting lots of SQL query code to use slave DB client, all you need is
+```typescript
+const slaveDBConfig = {
+    ...
+}
+const dbConnector = new DBConnectorClass(masterDBConfig, slaveDBConfig)
+```
+All selected queries will go to replica and write queries will go to master. No other code change is needed.
+
+Now the traffic is even higher, redis is introduced as cache layer. How many code changes?
+```typescript
+const cacheConfig = {
+    client: 'redis',
+    url: 'localhost@6379',
+    dbIndex: 1, // database index, default is 0
+    cacheHeader: 'dbCache'
+}
+const dbConnector = new DBConnectorClass(masterDBConfig, slaveDBConfig, cacheConfig)
+```
+Done, no other code change is needed. All read query results will be cached in redis.
+The key in redis will be dbCache:${sha256 hash of the raw query}
+
+If data should come from database instead of cache, set _getLatest to false.
+
+## Running queries
+For details, please read the documentations.
+The most basic one, running raw queries:
+```typescript
+/**
+ * run this query and return the result
+ * @param _query: parameterized query 
+ * {
+    text: string,
+    values: any[]
+    }
+    for example, { text: 'SELECT id, username FROM users WHERE age > $1 AND status = $2 ORDER BY modified DESC', values: [18,true] }
+ * @param _isWrite, default is false, true means the query will be handled by master db
+ * @param _getLatest, default is false, true means the query result will not come from cache or will not be saved in cache
+ * @returns 
+ */
+query(_query: Query, _isWrite?: boolean, _getLatest?: boolean): Promise<QueryResult>
+```
+
+Five different methods, select, insert, update, upsert, delete. 
+All write methods will return * at the end
+```typescript
+select(
+    _table: TableWithJoin[],
+    _fields: string[],
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+    _order?: QueryOrder[],
+    _limit?: number,
+    _offset?: number,
+    _getLatest?: boolean
+  ): Promise<QueryResult>
+// example 1: 'SELECT id, name FROM users'
+await select([{ table: 'users' }],['id', 'name'])
+/* example 2: 'SELECT u.id, u.name, up.profile_picture, uer.entity FROM users AS u 
+INNER JOIN user_profiles AS up ON u.id = up.user_id AND up.is_deleted = false 
+LEFT JOIN user_entity_relationship AS uer ON u.id = uer.user_id AND uer.is_deleted = true WHERE u.active = $1 OR uer.entity_category = $2
+ORDER BY u.created_at DESC LIMIT $3 OFFSET $4'
+values: [true, 'system', 10, 2]
+*/
+await select(
+    [{ table: 'users', name: 'u' }, 
+        {
+        table: 'user_profiles',
+        name: 'up',
+        join_type: 'INNER',
+        on: [{ left: 'u.id', right: 'up.user_id' }, { left: 'up.is_deleted', right: 'false' }],
+        }, 
+        {
+        table: 'user_entity_relationship',
+        name: 'uer',
+        join_type: 'LEFT',
+        on: [{ left: 'u.id', right: 'uer.user_id' }, { left: 'uer.is_deleted', right: 'true' }],
+        }
+    ],
+    ['u.id', 'u.name', 'up.profile_picture', 'uer.entity'],
+    { array: [
+        { field: 'u.active', comparator: '=', value: true }, 
+        { field: 'uer.entity_category', comparator: '=', value: 'system' }
+    ], is_or: true },
+    [{ field: 'u.created_at', is_asc: false }],
+    10,
+    2
+)
+
+insert(_table: string, _data: QueryData[]): Promise<QueryResult>
+// example 'INSERT INTO users (name, age) VALUES ($1, $2) RETURNING *', values:['test',30]
+await insert('users', [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }]) 
+
+update(_table: string, _data: QueryData[],
+    _conditions?: { array: QueryCondition[], is_or: boolean }
+): Promise<QueryResult>
+// example 'UPDATE users SET name = $1, age = $2 WHERE id <= $3 AND active != $4 RETURNING *', values:['test', 30, 1, true]
+await update('users',[{ field: 'name', value: 'test' }, { field: 'age', value: 30 }]
+    { array: [
+        { field: 'id', comparator: '<=', value: 1 }, 
+        { field: 'active', comparator: '!=', value: true }
+    ], is_or: false }
+)
+
+upsert(_table: string, _indexData: string[], _data: QueryData[]): Promise<QueryResult>
+// example: 'INSERT INTO users (id, name, age) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age RETURNING *', values: [1, 'test', 30]
+await upsert('users',['id'],
+    [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+)
+
+delete(_table: string,
+    _conditions?: { array: QueryCondition[], is_or: boolean }
+): Promise<QueryResult>
+// example: 'DELETE FROM users WHERE id <= $1 AND active != $2 RETURNING *', values: [1, true]
+await delete('users',
+    { array: [{ field: 'id', comparator: '<=', value: 1 }, { field: 'active', comparator: '!=', value: true }], is_or: false },
+)
+```
+
+## TODO
+Currently this only support postgresSQL connection using node-postgres, redis connection using redis.
+Support of message queue, using kafka by node-rdkafka
+Support of other databases / noSQL database for caching, and RabbitMQ as message queue.
+
+## Motivations
 When we learn programming and read / write data to SQL database, we use libraries like node-postgres and interacts with master database directly.
 It is normal for most cases. However, the loading on database will be huge when there are multiple instances / pods and a lot of concurrent users.
 
@@ -20,60 +181,22 @@ On the write side, strategies like database sharding / write-through cache / mes
 But they involve complicated setup and change in application coding.
 
 This module intends to minimize the changes required on the coding side when different cache / scaling methods are used.
-Ideally, the developer will write like interacting with a database directly, with write operations only have an UUID (tracking write operations) to return.
+Ideally, the developer will write like interacting with a database directly, no matter it is a single db, db with read replica, with cache layer, etc.
 All caching logic is handled inside this module.
+On the write side, it will return the actual result if master database is present and return an UUID (tracking write operations) when there is a message queue.
 
 It is different from existing libraries like sequelize-redis-cache as this involves different caching logics and also the write part.
 
 
-
-
-## Usage
-This module will support the following caching arrangements
-
-### Master database only
-Select queries will be cached in memory if results are small. Writes will send to DB directly. No auto invalidations.
-
-### Master database with read replica / read-only slave
-Select queries will be directed to read-only slaves if there is no in memory cache, and build up memory cache if results are small. Write queries will send to master directly. 
-Error will / will not return when read replica is not reachable.
-Default is throwing error to prevent master database from overloading by excessive reads.
-
-### + caching service like redis (Base)
-Same Strategy.
-Query results (under a certain size) will be cached in caching service with SHA-1 of the query input as cache key.
-Cache of a query will be revalidated async if it has past 90% of TTL and the query still comes.
-
-### Base + list of read-heavy queries
-Cache on read-heavy queries will be built on initialization and revalidated regularly.
-
-### Base + table for query logging
-Query history will be stored in the database (async, non-guranteed and append only), with whether it is handled by memory / redis / database. 
-Top 5 queries handled by database will be revalidated regularly.
-
-### read replica / read-only slave + caching (Read mode)
-For API service nodes which do not have calls to write to database and no need to build cache. Same strategy as Base, but writes will throw error.
-
-### Read mode + message queue like Kafka + table for query status queries
-For API service nodes which do not write data to master directly.
-All writes will go to the message queue instead of master database. 
-Each write will be assigned with an UUID as tracker ID.
-There is a need to implement kafka consumer (should not be inside the frontend / API services) to consume the messages, update database and revalidate the cache.
-
-### Message consumer (master database + message queue)
-A special usage which will process the messages and update database.
-It will first pick the message ID and insert into a database table, and when business logic is finished, write the result into database.
-Update cache if there are caching service and caching queries.
-
-
 ## Contributing
 If you want to contribute to this project, please submit a pull request or create an issue for discussion. 
-Opening distribution on README / documentation writing is also welcomed.
+Working on README / documentations are also welcomed.
 
 
 ## FAQ / Troubleshooting / Support
 Please open an issue on github.
 
-## Future work
-Currently this only support postgresSQL connection using node-postgres, redis connection using redis, and kafka connection using node-rdkafka.
-When time is allowed other database / caching system / messenge queue will be supported.
+## Funding
+You may buy me a coffee.
+BTC: bc1qgl8g2xu3f60lkxgzg80jvykkmf3gywaky3c2tt
+ETH / BNB / POL (pologon): 0xA5BC03ddc951966B0Df385653fA5b7CAdF1fc3DA
