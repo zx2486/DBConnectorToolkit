@@ -84,7 +84,7 @@ export default class PgClass implements DBClass {
 
   // Validate inputs to not allow SQL injection
   static validateIdentifier = (identifier: string) => {
-    if (!/^[a-zA-Z_]+[.]?[a-zA-Z0-9_]*$|^\*$/.test(identifier)) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)?$|^\*$/.test(identifier)) {
       throw new Error(`Invalid identifier: ${identifier}`)
     }
   }
