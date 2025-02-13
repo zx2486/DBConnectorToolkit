@@ -1,0 +1,17 @@
+name: Restrict Merge
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if branch name is valid
+        run: |
+          if [[ ! "${GITHUB_HEAD_REF}" =~ ^(hotfix/.*|development)$ ]]; then
+            echo "Branch name must start with 'hotfix/' or be 'development'"
+            exit 1
+          fi
