@@ -1,6 +1,6 @@
 import type {
   Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
-} from './baseClass.ts'
+} from './baseClass'
 
 import { CacheClass } from './redisClass'
 

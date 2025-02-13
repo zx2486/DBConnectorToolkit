@@ -1,4 +1,4 @@
-import type { DBConfig, CacheConfig, DBClass } from './baseClass.ts'
+import type { DBConfig, CacheConfig, DBClass } from './baseClass'
 import PgClass from './dbClass'
 
 import { RedisClass } from './redisClass'
