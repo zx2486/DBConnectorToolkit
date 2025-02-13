@@ -1,7 +1,7 @@
 import { createClient, createCluster } from 'redis'
 import bunyan from 'bunyan'
 import { createHash } from 'crypto'
-import type { Query, QueryResult, CacheConfig } from './baseClass.ts'
+import type { Query, QueryResult, CacheConfig } from './baseClass'
 
 export interface CacheClass {
   connect(): Promise<void>

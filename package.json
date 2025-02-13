@@ -6,7 +6,8 @@
   "scripts": {
     "lint": "eslint src/**/*.ts",
     "test": "mocha --require ts-node/register 'test/**/*.spec.ts'",
-    "coverage": "nyc --reporter=text --reporter=html npm test"
+    "coverage": "nyc --reporter=text --reporter=html npm test",
+    "build": "tsc"
   },
   "repository": {
     "type": "git",

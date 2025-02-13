@@ -3,7 +3,7 @@ import uuid from 'uuid'
 import { Pool } from 'pg'
 import type {
   Query, DBConfig, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
-} from './baseClass.ts'
+} from './baseClass'
 
 export default class PgClass implements DBClass {
   private dbConfig: DBConfig

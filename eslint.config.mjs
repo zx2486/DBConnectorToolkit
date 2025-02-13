@@ -18,6 +18,13 @@ export default [
   {
     files: ["**/*.js", "**/*.ts"],
     languageOptions: { sourceType: "commonjs", parser: parserTs },
+    settings: {
+      "import/resolver": {
+        node: {
+          extensions: [".js", ".jsx", ".ts", ".tsx"]
+        }
+      }
+    },
     rules: {
       "semi": ["error", "never"],
       "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
@@ -25,7 +32,17 @@ export default [
         "error",
         { "blankLine": "never", "prev": ["private", "readonly"], "next": "*" }
       ] */
-      "lines-between-class-members": ["error", "always", { exceptAfterSingleLine: true }]
+      "lines-between-class-members": ["error", "always", { exceptAfterSingleLine: true }],
+      "import/extensions": [
+        "error",
+        "ignorePackages",
+        {
+          "js": "never",
+          "jsx": "never",
+          "ts": "never",
+          "tsx": "never"
+        }
+      ]
     },
     plugins: {
       "@typescript-eslint": pluginTs,
