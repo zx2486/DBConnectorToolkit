@@ -1,6 +1,6 @@
 # DBConnectorToolkit
 This module provides an integrated tool to connect database under different settings, single db, master with read replica, with redis for caching, and use message queue to centralize db writes requests.
-The main purpose is to reduce code changes when the application has growing traffic and been upgrading in infra.
+The main purpose is to reduce code changes on application with growing traffic and upgrading in infra.
 
 ## Installation
 ```bash
