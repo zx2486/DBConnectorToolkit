@@ -241,4 +241,16 @@ describe('DBConnectorClass', () => {
       assert.strictEqual(masterDB.delete.callCount, 3)
     })
   })
+
+  describe('buildCache', () => {
+    it('should call buildCache for redis', async () => {
+      masterDB.isconnect.resetHistory()
+      redis.isconnect.resetHistory()
+      redis.buildCache.resetHistory()
+      await dbConnector.buildCache({ text: 'SELECT * FROM users', values: [] })
+      assert.strictEqual(masterDB.isconnect.callCount, 1)
+      assert.strictEqual(redis.isconnect.callCount, 1)
+      assert.strictEqual(redis.buildCache.callCount, 1)
+    })
+  })
 })

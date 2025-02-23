@@ -141,6 +141,168 @@ describe('PgClass', () => {
     })
   })
 
+  const validConfig = {
+    client: 'pg',
+    endpoint: 'localhost',
+    port: 5432,
+    database: 'test',
+    username: 'user',
+    password: 'password',
+  }
+  describe('Throw error correctly', () => {
+    it('should validate a query correctly', async () => {
+      const invalidConfigs = [
+        { ...validConfig, client: 'notpg' },
+        { ...validConfig, endpoint: '' },
+        { ...validConfig, port: 0 },
+        { ...validConfig, database: '' },
+        { ...validConfig, username: '' },
+        { ...validConfig, password: '' },
+      ]
+      await Promise.all(invalidConfigs.map(async (c) => {
+        await assert.rejects(
+          async () => {
+            const pgClassShouldNotWork = new PgClass(c)
+            assert.fail(new Error(`should throw error but did not ${c}`))
+          },
+          (err: Error) => {
+            assert.strictEqual(err.name, 'Error')
+            assert.strictEqual(err.message, 'Invalid DB config')
+            return true
+          },
+        )
+      }))
+    })
+  })
+
+  describe('connect, disconnect, isconnect', () => {
+    let pgClass: PgClass
+    let poolStub: sinon.SinonStubbedInstance<Pool>
+    let loggerStub: sinon.SinonStubbedInstance<any>
+    let clientStub: { [key: string]: any } = {}
+
+    before(() => {
+      // Stub the Pool class
+      poolStub = sinon.createStubInstance(Pool)
+
+      // Stub the logger
+      loggerStub = {
+        error: sinon.stub(),
+        info: sinon.stub(),
+        createLogger: sinon.stub().returns({
+          error: sinon.stub(),
+          info: sinon.stub(),
+        }),
+      }
+      clientStub = []
+
+      // Create an instance of PgClass with the stubbed Pool
+      pgClass = new PgClass({
+        client: 'pg',
+        endpoint: 'localhost',
+        port: 5432,
+        database: 'test',
+        username: 'user',
+        password: 'password',
+      });
+      (pgClass as any).pool = poolStub;
+      (pgClass as any).clients = clientStub;
+      (pgClass as any).logger = loggerStub
+
+      // Stub the query method to run the special function
+      poolStub.connect.callsFake(async () => ({
+        release: sinon.stub(), removeAllListeners: sinon.stub(),
+      }))
+      poolStub.end.callsFake(async () => ({}))
+      poolStub.query.callsFake(async () => ({}))
+    })
+
+    after(() => {
+      // Restore the original methods
+      sinon.restore()
+    })
+
+    it('should connect to the database', async () => {
+      poolStub.connect.resetHistory()
+      await pgClass.connect()
+      assert(poolStub.connect.calledOnce)
+      assert(Object.keys(clientStub).length === 1)
+    })
+
+    it('should log an error and throw when connection fails', async () => {
+      const error = new Error('Connection failed')
+      poolStub.connect.rejects(error)
+      loggerStub.error.resetHistory()
+
+      await assert.rejects(async () => {
+        await pgClass.connect()
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Failed to connect to database')
+        return true
+      })
+      assert(loggerStub.error.calledWith({ event: 'PGPool - connect', err: error }))
+    })
+
+    it('should disconnect from the database', async () => {
+      const fakeClient = { release: sinon.stub(), removeAllListeners: sinon.stub() };
+      (pgClass as any).clients = { 'client-id': fakeClient }
+      poolStub.end.resetHistory()
+      await pgClass.disconnect()
+
+      assert(fakeClient.removeAllListeners.calledOnce)
+      assert(fakeClient.release.calledOnce)
+      assert(poolStub.end.calledOnce)
+    })
+
+    it('should log an error and throw when disconnection fails', async () => {
+      const error = new Error('Connection failed')
+      poolStub.end.rejects(error)
+      loggerStub.error.resetHistory()
+
+      await assert.rejects(async () => {
+        await pgClass.disconnect()
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Failed to disconnect from database')
+        return true
+      })
+      assert(loggerStub.error.calledWith({ event: 'PGPool - disconnect', err: error }))
+    })
+
+    it('should check isconnect to the database', async () => {
+      poolStub.query.resetHistory()
+      assert(await pgClass.isconnect())
+      assert(poolStub.query.calledOnce)
+
+      const error = new Error('Connection failed')
+      poolStub.query.rejects(error)
+      loggerStub.error.resetHistory()
+      assert(!(await pgClass.isconnect()))
+      assert(loggerStub.error.calledWith({ event: 'PGPool - isconnect', err: error }))
+    })
+
+    it('should connect to database when it is not when calling query', async () => {
+      poolStub.query.resetHistory()
+      poolStub.connect.resetHistory()
+      poolStub.connect.callsFake(async () => ({
+        release: sinon.stub(), removeAllListeners: sinon.stub(),
+      }))
+      const error = new Error('Connection failed')
+      poolStub.query.rejects(error)
+      // the call will do one connect() and still reject (as query is not running)
+      await assert.rejects(async () => {
+        await pgClass.query({ text: 'SELECT * FROM users', values: [] })
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Connection failed')
+        return true
+      })
+      assert(poolStub.connect.calledOnce)
+      assert(poolStub.query.callCount === 2)
+    })
+  })
+
   describe('validateQuery', () => {
     let pgClass: PgClass
     let poolStub: sinon.SinonStubbedInstance<Pool>

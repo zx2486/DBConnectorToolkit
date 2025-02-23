@@ -1,5 +1,5 @@
 import bunyan from 'bunyan'
-import uuid from 'uuid'
+import { v4 as uuidv4 } from 'uuid'
 import { Pool } from 'pg'
 import type {
   Query, DBConfig, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
@@ -39,7 +39,7 @@ export default class PgClass implements DBClass {
 
   async connect() {
     try {
-      const clientId: string = uuid.v4()
+      const clientId: string = uuidv4()
       // only used by transaction
       this.clients[clientId] = await this.pool.connect()
     } catch (err) {

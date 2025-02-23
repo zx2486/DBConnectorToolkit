@@ -115,4 +115,14 @@ export default class DBConnectorClass {
   ) {
     return this.masterDB.delete(_table, _conditions)
   }
+
+  async buildCache(_query: Query): Promise<void> {
+    if (
+      this.redis && await this.redis.isconnect()
+      && this.masterDB && await this.masterDB.isconnect()
+    ) {
+      const result = await this.masterDB.query(_query, false, true)
+      await this.redis.buildCache(_query, result)
+    }
+  }
 }
