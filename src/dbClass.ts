@@ -78,8 +78,13 @@ export default class PgClass implements DBClass {
     if (!(await this.isconnect())) {
       await this.pool.connect()
     }
-    const result = await this.pool.query(_query.text, _query.values)
-    return { rows: result, count: result.length || 0, ttl: undefined }
+    try {
+      const result = await this.pool.query(_query.text, _query.values)
+      return { rows: result, count: result.length || 0, ttl: undefined }
+    } catch (err) {
+      this.logger.error({ event: 'query', err })
+      throw new Error('Invalid SQL query')
+    }
   }
 
   // Validate inputs to not allow SQL injection

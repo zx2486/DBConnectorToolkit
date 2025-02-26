@@ -56,10 +56,36 @@ describe('redisClass', () => {
     })
   })
 
+  describe('Class constructor throw error correctly', () => {
+    it('throw error correctly', async () => {
+      const invalidConfigs = [
+        { ...standaloneConfig, client: 'notredis' },
+        { ...standaloneConfig, url: '' },
+        { ...clusterConfig, client: 'notredis' },
+        { ...clusterConfig, url: '' },
+      ]
+      await Promise.all(invalidConfigs.map(async (c) => {
+        await assert.rejects(
+          async () => {
+            const redisClassWhcihNotWork = new RedisClass(c)
+            assert.fail(new Error(`should throw error but did not ${c}`))
+          },
+          (err: Error) => {
+            assert.strictEqual(err.name, 'Error')
+            assert.strictEqual(err.message, 'Invalid Redis config')
+            return true
+          },
+        )
+      }))
+    })
+  })
+
   describe('Instance methods', () => {
     let clientStub: any
     let redisClass: RedisClass
     let redisClass2: RedisClass
+    let redisClass3: RedisClass
+    let redisClass4: RedisClass
     let isRedisWorking: boolean = true
 
     before(() => {
@@ -106,6 +132,8 @@ describe('redisClass', () => {
       }).RedisClass
       redisClass = new StubRedisClass(standaloneConfig)
       redisClass2 = new StubRedisClass(clusterConfig)
+      redisClass3 = new StubRedisClass(standaloneConfig)
+      redisClass4 = new StubRedisClass(clusterConfig)
     })
 
     after(() => {
@@ -129,12 +157,12 @@ describe('redisClass', () => {
     it('should connect fail if redis is not working', async () => {
       isRedisWorking = false
       try {
-        await redisClass.connect()
+        await redisClass3.connect()
       } catch (err: any) {
         assert.strictEqual(err.message, 'Fail to connect to Redis')
       }
       try {
-        await redisClass2.connect()
+        await redisClass4.connect()
       } catch (err: any) {
         assert.strictEqual(err.message, 'Fail to connect to Redis')
       }

@@ -149,8 +149,8 @@ describe('PgClass', () => {
     username: 'user',
     password: 'password',
   }
-  describe('Throw error correctly', () => {
-    it('should validate a query correctly', async () => {
+  describe('Class constructor Throw error correctly', () => {
+    it('throw error correctly', async () => {
       const invalidConfigs = [
         { ...validConfig, client: 'notpg' },
         { ...validConfig, endpoint: '' },
@@ -295,7 +295,7 @@ describe('PgClass', () => {
         await pgClass.query({ text: 'SELECT * FROM users', values: [] })
       }, (err: Error) => {
         assert.strictEqual(err.name, 'Error')
-        assert.strictEqual(err.message, 'Connection failed')
+        assert.strictEqual(err.message, 'Invalid SQL query')
         return true
       })
       assert(poolStub.connect.calledOnce)

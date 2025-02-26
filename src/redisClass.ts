@@ -21,8 +21,8 @@ export class RedisClass implements CacheClass {
   private logger: bunyan
 
   constructor(_config: CacheConfig) {
-    if (!_config || _config.client !== 'redis') {
-      throw new Error('Invalid DB config')
+    if (!_config || _config.client !== 'redis' || !_config.url) {
+      throw new Error('Invalid Redis config')
     }
     this.logger = bunyan.createLogger({
       name: 'RedisClass',
@@ -49,7 +49,7 @@ export class RedisClass implements CacheClass {
       is_cluster: _config.cluster || false,
       nodeList: _config.additionalNodeList && _config.additionalNodeList.length > 0
         ? [_config.url, ..._config.additionalNodeList] : false,
-      cacheHeader: `${_config.cacheHeader}:` || '',
+      cacheHeader: (_config.cacheHeader) ? `${_config.cacheHeader}:` : 'dbCache:',
       cacheTTL: _config.cacheTTL || 3600,
       revalidate: _config.revalidate || 60,
     }
@@ -78,20 +78,11 @@ export class RedisClass implements CacheClass {
           : createClient({
             url: this.cacheConfig.url, ...this.cacheConfig.options, legacyMode: false,
           })
-        newClient.on('error', (err: any) => {
-          this.logger.error({ event: `Redis (${this.cacheConfig.url}) error`, err })
-        })
-        newClient.on('reconnecting', () => {
-          this.logger.error({ event: `Redis (${this.cacheConfig.url}) reconnecting` })
-        })
-        newClient.on('end', () => {
-          this.logger.error({ event: `Redis (${this.cacheConfig.url}) end` })
-        })
-        newClient.on('ready', () => {
-          this.logger.info({ event: `Redis (${this.cacheConfig.url}) ready` })
-        })
-        newClient.on('connect', () => {
-          this.logger.info({ event: `Redis (${this.cacheConfig.url}) connect` })
+        const logList = ['error', 'reconnecting', 'end', 'ready', 'connect']
+        logList.forEach((event) => {
+          newClient.on(event, (err: any) => {
+            this.logger.error({ event: `Redis (${this.cacheConfig.url}) ${event}`, err })
+          })
         })
 
         await newClient.connect()
