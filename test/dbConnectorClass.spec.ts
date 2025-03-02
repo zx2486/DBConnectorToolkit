@@ -20,6 +20,10 @@ describe('DBConnectorClass', () => {
       disconnect: sinon.stub(),
       isconnect: sinon.stub().resolves(true),
       buildSelectQuery: sinon.stub().returns({ text: 'SELECT * FROM users', fields: [] }),
+      buildInsertQuery: sinon.stub(),
+      buildUpdateQuery: sinon.stub(),
+      buildUpsertQuery: sinon.stub(),
+      buildDeleteQuery: sinon.stub(),
       query: sinon.stub().resolves({ rows: [{ id: 'key1' }], count: 1 }),
       select: sinon.stub(),
       insert: sinon.stub(),
@@ -239,6 +243,21 @@ describe('DBConnectorClass', () => {
       await dbConnector2.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector3.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
       assert.strictEqual(masterDB.delete.callCount, 3)
+    })
+
+    it('build query calls should also go to masterDB', () => {
+      masterDB.buildInsertQuery.resetHistory()
+      dbConnector.buildInsertQuery('users', [])
+      assert(masterDB.buildInsertQuery.calledOnce)
+      masterDB.buildUpdateQuery.resetHistory()
+      dbConnector.buildUpdateQuery('users', [], { array: [{ field: 'id', value: true }], is_or: false })
+      assert(masterDB.buildUpdateQuery.calledOnce)
+      masterDB.buildUpsertQuery.resetHistory()
+      dbConnector.buildUpsertQuery('users', [], [])
+      assert(masterDB.buildUpsertQuery.calledOnce)
+      masterDB.buildDeleteQuery.resetHistory()
+      dbConnector.buildDeleteQuery('users', { array: [{ field: 'id', value: true }], is_or: false })
+      assert(masterDB.buildDeleteQuery.calledOnce)
     })
   })
 
