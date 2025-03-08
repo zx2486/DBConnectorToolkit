@@ -113,20 +113,25 @@ export interface CacheClass {
 }
 
 export interface QueueConfig {
+  client: string,
   brokerList: string,
-  bufferMaxMs: number,
-  codec: string,
-  keepAlive: boolean,
-  securityProtocol: string,
-  saslMechanism: string,
-  saslUsername: string,
-  saslPassword: string,
-  requiredAcks: number,
-  pollInterval: number,
-  insertTopic: string,
-  updateTopic: string,
-  upsertTopic: string,
-  deleteTopic: string,
+  bufferMaxMs?: number,
+  bufferMaxMessages?: number,
+  codec?: string,
+  keepAlive?: boolean,
+  securityProtocol?: string,
+  saslMechanism?: string,
+  saslUsername?: string,
+  saslPassword?: string,
+  autoCommit?: boolean,
+  requiredAcks?: number,
+  pollInterval?: number,
+  consumeTimeout?: number,
+  consumeLoopDelay?: number,
+  insertTopic?: string,
+  updateTopic?: string,
+  upsertTopic?: string,
+  deleteTopic?: string,
   logLevel?: string,
 }
 
@@ -141,10 +146,13 @@ export type QueueMessage = {
 // Basic QueueClass interface, all objects connecting to a queue should implement this
 // For Kafka, the send function will always return null as direct message reply is not supported
 export interface QueueClass {
-  connect(): Promise<void>
-  disconnect(): Promise<void>
-  isconnect(): Promise<boolean>
-  getConfig(): any
+  connect(isProducer: boolean): Promise<void>
+  disconnect(isProducer: boolean): Promise<void>
+  isconnect(isProducer: boolean): boolean
+  getConfig(isProducer: boolean): any
   send(_msg: QueueMessage[]): Promise<UUID | null>
-  sendQuery(_query: Query): Promise<UUID | null>
+  sendCount(): number
+  subscribe(topicList: { topic: string, callback: (_msg: QueueMessage) => Promise<void> }[]): Promise<void>
+  receiveCount(): number
+  createTopic(_topicList: { topic: string, partitionNum: number, replicaNum: number, retentionMs: number }[]): Promise<void>
 }
