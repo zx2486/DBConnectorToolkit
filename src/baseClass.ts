@@ -30,7 +30,7 @@ export type DBConfig = {
   username: string,
   password: string,
   ssl?: boolean,
-  logLevel?: string,
+  logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
   idleTimeoutMillis?: number,
   minConnection?: number,
   maxConnection?: number,
@@ -97,7 +97,7 @@ export type CacheConfig = {
   tls?: boolean,
   checkServerIdentity?: any,
   cluster?: boolean,
-  logLevel?: string,
+  logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
 }
 
 export interface CacheClass {
@@ -114,45 +114,59 @@ export interface CacheClass {
 
 export interface QueueConfig {
   client: string,
-  brokerList: string,
-  bufferMaxMs?: number,
-  bufferMaxMessages?: number,
-  codec?: string,
-  keepAlive?: boolean,
-  securityProtocol?: string,
-  saslMechanism?: string,
-  saslUsername?: string,
-  saslPassword?: string,
-  autoCommit?: boolean,
-  requiredAcks?: number,
-  pollInterval?: number,
-  consumeTimeout?: number,
-  consumeLoopDelay?: number,
-  insertTopic?: string,
-  updateTopic?: string,
-  upsertTopic?: string,
-  deleteTopic?: string,
-  logLevel?: string,
+  appName: string,
+  brokerList: string[],
+  groupId?: string, // required for consumer
+  ssl?: boolean | {
+    rejectUnauthorized: boolean
+    ca: string[],
+    key: string,
+    cert: string
+  },
+  sasl?: boolean | {
+    mechanism: string,
+    username?: string,
+    password?: string,
+    authenticationTimeout?: number,
+    reauthenticationThreshold?: number,
+    oauthBearerProvider?: () => Promise<any>,
+    authorizationIdentity?: string,
+    accessKeyId?: string,
+    secretAccessKey?: string,
+    sessionToken?: string
+  },
+  connectionTimeout?: number,
+  requestTimeout?: number,
+  enforceRequestTimeout?: boolean,
+  acks?: number,
+  msgTimeout?: number,
+  compression?: 'gzip' | 'snappy' | 'lz4' | 'zstd', // default is none, only gzip is supported without other pacakages
+  logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
 }
 
 export type QueueMessage = {
   topic: string,
-  message: Buffer | String,
+  message: String,
   key: String,
-  headers: Object,
-  ingressionTs: number
+  headers?: Object,
+  ingressionTs?: number
 }
 
 // Basic QueueClass interface, all objects connecting to a queue should implement this
 // For Kafka, the send function will always return null as direct message reply is not supported
 export interface QueueClass {
-  connect(isProducer: boolean): Promise<void>
-  disconnect(isProducer: boolean): Promise<void>
-  isconnect(isProducer: boolean): boolean
-  getConfig(isProducer: boolean): any
+  connect(_isProducer: boolean): Promise<void>
+  disconnect(_isProducer: boolean): Promise<void>
+  isconnect(_isProducer: boolean): boolean
+  getConfig(): any
   send(_msg: QueueMessage[]): Promise<UUID | null>
   sendCount(): number
-  subscribe(topicList: { topic: string, callback: (_msg: QueueMessage) => Promise<void> }[]): Promise<void>
+  subscribe(
+    _topicList: {
+      topic: string,
+      callback: (_msg: QueueMessage) => Promise<void>
+    }[],
+    _fromBeginning?: boolean
+  ): Promise<void>
   receiveCount(): number
-  createTopic(_topicList: { topic: string, partitionNum: number, replicaNum: number, retentionMs: number }[]): Promise<void>
 }

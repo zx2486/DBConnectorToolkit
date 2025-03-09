@@ -1,240 +1,257 @@
+import { UUID } from 'crypto'
 import bunyan from 'bunyan'
+import {
+  Kafka, logLevel, CompressionTypes, EachMessagePayload,
+} from 'kafkajs'
 import type {
-    QueueConfig, QueueMessage, QueueClass,
-    Query
+  QueueConfig, QueueMessage, QueueClass,
 } from './baseClass'
 
-
 export default class KafkaClass implements QueueClass {
-    private config: QueueConfig
-    private producerConfig: any
-    private consumerConfig: any
-    private produceCount: number = 0
-    private consumeCount: number = 0
-    private producer: any
-    private consumer: any
-    private consumerList: Map<string, (_msg: QueueMessage) => Promise<void>> = new Map()
-    private producerConnected: boolean = false
-    private consumerConnected: boolean = false
-    private logger: bunyan
+  private config: any
+  private kafkaObj: any
+  private produceCount: number = 0
+  private consumeCount: number = 0
+  private producer: any
+  private consumer: any
+  private consumerList: Map<string, (_msg: QueueMessage) => Promise<void>> = new Map()
+  private producerConnected: boolean = false
+  private consumerConnected: boolean = false
+  private logger: bunyan
 
-    constructor(_config: QueueConfig) {
-        this.config = _config
-        if (!_config.client !== 'kafka' || !_config.brokerList) {
-            throw new Error('Invalid Kafka config')
-        }
-        this.logger = bunyan.createLogger({
-            name: 'KafkaClass',
-            streams: [{ stream: process.stderr, level: _config.logLevel as bunyan.LogLevel }],
-        })
-        this.producerConfig = {
-            'metadata.broker.list': _config.brokerList,
-            'compression.codec': _config.codec || 'gzip',
-            'queue.buffering.max.ms': _config.bufferMaxMs || 10,
-            'queue.buffering.max.messages': _config.bufferMaxMessages || 100000,
-            'socket.keepalive.enable': _config.keepAlive || false,
-            'enable.auto.commit': _config.autoCommit || false,
-        }
-        if (_config.securityProtocol && _config.saslMechanism || _config.saslUsername || _config.saslPassword) {
-            this.producerConfig['security.protocol'] = _config.securityProtocol
-            this.producerConfig['sasl.mechanism'] = _config.saslMechanism
-            this.producerConfig['sasl.username'] = _config.saslUsername
-            this.producerConfig['sasl.password'] = _config.saslPassword
-        }
-        this.consumerConfig = {
-            ...this.producerConfig,
-            'group.id': 'kafka',
-        }
-        this.producerConfig['request.required.acks'] = _config.requiredAcks || 0
-        this.producerConfig['poolInterval'] = _config.pollInterval || 100
-        this.consumerConfig['consumeTimeout'] = _config.consumeTimeout || 100
-        this.consumerConfig['consumeLoopDelay'] = _config.consumeLoopDelay || 10
+  constructor(_config: QueueConfig) {
+    // this.config = _config
+    if (_config.client !== 'kafka' || !_config.brokerList || !_config.appName) {
+      throw new Error('Invalid Kafka config')
     }
+    const {
+      // eslint-disable-next-line no-unused-vars
+      client, appName, brokerList, logLevel: clientlogLevel, msgTimeout, compression, ...restConfig
+    } = _config
+    this.logger = bunyan.createLogger({
+      name: 'KafkaClass',
+      streams: [{ stream: process.stderr, level: _config.logLevel as bunyan.LogLevel }],
+    })
+    let kafkaLogLevel: logLevel
+    switch (clientlogLevel) {
+      case 'trace':
+      case 'debug':
+        kafkaLogLevel = logLevel.DEBUG
+        break
+      case 'info':
+        kafkaLogLevel = logLevel.INFO
+        break
+      case 'warn':
+        kafkaLogLevel = logLevel.WARN
+        break
+      case 'error':
+      case 'fatal':
+        kafkaLogLevel = logLevel.ERROR
+        break
+      default:
+        kafkaLogLevel = logLevel.NOTHING
+    }
+    let msgCompression: CompressionTypes
+    switch (compression) {
+      case 'gzip':
+        msgCompression = CompressionTypes.GZIP
+        break
+      case 'snappy':
+        msgCompression = CompressionTypes.Snappy
+        break
+      case 'lz4':
+        msgCompression = CompressionTypes.LZ4
+        break
+      case 'zstd':
+        msgCompression = CompressionTypes.ZSTD
+        break
+      default:
+        msgCompression = CompressionTypes.None
+    }
+    this.config = {
+      ...restConfig,
+      clientId: appName,
+      brokers: brokerList,
+      logLevel: kafkaLogLevel,
+      timeout: msgTimeout || 30000,
+      compression: msgCompression,
+    }
+    this.kafkaObj = new Kafka({ ...this.config })
+  }
 
-    async connect(isProducer: boolean = true): Promise<void> {
-        // Connect to Kafka
-        if (isProducer) {
-            try {
-                this.producer = new Kafka.Producer(
-                    this.producerConfig, { 'request.required.acks': this.producerConfig['request.required.acks'] }
-                )
-                this.producer.setPollInterval(this.producerConfig['poolInterval'])
-                this.producer.on('ready', () => {
-                    this.producerConnected = true
-                    this.logger.info({ event: 'Producer - ready' })
-                })
-                this.producer.on('event.error', (err: any) => {
-                    this.logger.error({ event: 'Producer - event.error', err })
-                })
-                this.producer.on('delivery-report', async (err: any, report: any) => {
-                    if (err) {
-                        this.logger.error({ event: 'Producer - delivery report error', err })
-                    }
-                    if (report) {
-                        this.produceCount += 1
-                        this.logger.debug({
-                            event: 'Producer - delivery report received',
-                            data: {
-                                key: report.key,
-                                opaque: report.opaque
-                            }
-                        })
-                    }
-                })
-                this.producer.on('disconnected', () => {
-                    this.producerConnected = false
-                    this.logger.info({ event: 'Producer - disconnected' })
-                })
-                this.producer.on('connection.failure', (err: any) => {
-                    this.logger.error({ event: 'Producer - connection.failure', err })
-                })
-                await this.producer.connect()
-            } catch (err) {
-                this.logger.error({ event: 'Producer - connect', err })
+  async connect(_isProducer: boolean = true): Promise<void> {
+    // Connect to Kafka
+    if (_isProducer) {
+      try {
+        this.producer = this.kafkaObj.producer()
+        await this.producer.connect()
+        this.producerConnected = true
+      } catch (err) {
+        this.logger.error({ event: 'Producer - connect', err })
+      }
+    } else {
+      try {
+        if (!this.config.groupId) {
+          throw new Error('Invalid Kafka config: groupId is required for consumer')
+        }
+        this.consumer = this.kafkaObj.consumer({ groupId: this.config.groupId })
+        await this.consumer.connect()
+        this.consumerConnected = true
+      } catch (err) {
+        this.logger.error({ event: 'Consumer - connect', err })
+      }
+    }
+  }
+
+  async disconnect(_isProducer: boolean = true): Promise<void> {
+    if (_isProducer && this.producer) {
+      await this.producer.disconnect()
+      this.producerConnected = false
+    } else if (!_isProducer && this.consumer) {
+      await this.consumer.disconnect()
+      this.consumerConnected = false
+    }
+  }
+
+  isconnect(_isProducer: boolean = true): boolean {
+    // Check if connected to Kafka
+    return (_isProducer) ? this.producerConnected : this.consumerConnected
+  }
+
+  getConfig(): any {
+    return this.config
+  }
+
+  sendCount(): number {
+    return this.produceCount
+  }
+
+  receiveCount(): number {
+    return this.consumeCount
+  }
+
+  async send(_message: QueueMessage[]): Promise<UUID | null> {
+    if (!this.producerConnected || !this.producer) {
+      throw new Error('Producer is not connected')
+    }
+    if (_message.length === 0) {
+      return null
+    }
+    // Send message to Kafka
+    // group the messages in _message by topic
+    const msgMap = new Map()
+    _message.forEach((msg) => {
+      if (msgMap.has(msg.topic)) {
+        msgMap.get(msg.topic).push(msg)
+      } else {
+        msgMap.set(msg.topic, [msg])
+      }
+    })
+    // send the messages to Kafka
+    try {
+      this.producer.sendBatch({
+        topicMessages: Array.from(msgMap.entries()).map(([topic, msgs]) => ({
+          topic,
+          messages: msgs.map((msg: QueueMessage) => {
+            const message: any = {
+              value: msg.message,
+              key: msg.key,
+              timestamp: msg.ingressionTs || Date.now(),
             }
-        } else {
-            try {
-                this.consumer = new Kafka.KafkaConsumer(this.consumerConfig, {})
-                this.consumer.setDefaultConsumeTimeout(this.consumerConfig['consumeTimeout'])
-                this.consumer.setDefaultConsumeLoopTimeoutDelay(this.consumerConfig['consumeLoopDelay'])
-                this.consumer.on('ready', () => {
-                    this.consumerConnected = true
-                    this.logger.info({ event: 'Consumer - ready' })
-                })
-                this.consumer.on('event.error', (err: any) => {
-                    this.logger.error({ event: 'Consumer - event.error', err })
-                })
-                this.consumer.on('data', async (data: any) => {
-                    const t0 = performance.now()
-                    const consumerHandler = this.consumerList.get(data.topic)
-                    if (consumerHandler) {
-                        this.consumeCount += 1
-                        await consumerHandler({
-                            topic: data.topic,
-                            message: data.value,
-                            key: data.key,
-                            headers: data.headers,
-                            ingressionTs: data.timestamp
-                        })
-                    } else {
-                        this.logger.warn({
-                            event: 'Consumer - data - unknown data.topic',
-                            data: { topic: data.topic }
-                        })
-                    }
-                    const t1 = performance.now()
-                    this.logger.debug({
-                        event: 'Consumer - data',
-                        data: { topic: data.topic, totalTime: `${(t1 - t0).toFixed(3)} ms` }
-                    })
-                })
-                this.consumer.on('disconnected', () => {
-                    this.consumerConnected = false
-                    this.logger.info({ event: 'Consumer - disconnected' })
-                })
-                this.consumer.on('connection.failure', (err: any) => {
-                    this.logger.error({ event: 'Consumer - connection.failure', err })
-                })
-                await this.consumer.connect()
-            } catch (err) {
-                this.logger.error({ event: 'Consumer - connect', err })
+            if (msg.headers) {
+              message.headers = msg.headers
             }
-        }
-
+            return message
+          }),
+          acks: this.config.acks || -1,
+          timeout: this.config.timeout,
+          compression: this.config.compression,
+        })),
+      })
+      this.produceCount += _message.length
+    } catch (err) {
+      this.logger.error({
+        event: 'Producer - produce err',
+        err,
+        data: {
+          ..._message,
+        },
+      })
     }
+    return null
+  }
 
-    async disconnect(isProducer: boolean = true): Promise<void> {
-        if (isProducer && this.producer) await this.producer.disconnect()
-        else if (!isProducer && this.consumer) await this.consumer.disconnect()
+  async subscribe(
+    _topicList: {
+      topic: string,
+      callback: (_msg: QueueMessage) => Promise<void>
+    }[],
+    fromBeginning: boolean = false,
+  ): Promise<void> {
+    if (!this.consumerConnected || !this.consumer) {
+      throw new Error('Consumer is not connected')
     }
-
-    isconnect(isProducer: boolean = true): boolean {
-        // Check if connected to Kafka
-        return (isProducer) ? this.producerConnected : this.consumerConnected
+    if (_topicList.length === 0) {
+      return
     }
-
-    getConfig(isProducer: boolean = true): any {
-        return (isProducer) ? this.producerConfig : this.consumerConfig
-    }
-
-    sendCount(): number {
-        return this.produceCount
-    }
-
-    receiveCount(): number {
-        return this.consumeCount
-    }
-
-    convertRequestHeadersToKafkaHeaders(headers = {}) {
-        return Object.entries(headers).map((v) => ({ [v[0]]: v[1].toString() }))
-    }
-
-    async send(_message: QueueMessage[]): Promise<void> {
-        // Send message to Kafka
-        _message.forEach((msg) => {
+    // extract the callback function from the topicList and store it in the consumerList
+    _topicList.forEach((topic) => {
+      this.consumerList.set(topic.topic, topic.callback)
+    })
+    // subscribe to the topics
+    try {
+      await this.consumer.subscribe({
+        topics: _topicList.map((topic) => topic.topic),
+        fromBeginning,
+      })
+      await this.consumer.run({
+        eachMessage: async (messagePayload: EachMessagePayload) => {
+          const { topic, partition, message } = messagePayload
+          const prefix = `${topic}[${partition} | ${message.offset}] / ${message.timestamp}`
+          this.logger.debug({
+            event: 'Consumer - message',
+            data: {
+              msg: `- ${prefix} ${message.key}`,
+            },
+          })
+          const callback = this.consumerList.get(topic)
+          if (callback) {
             try {
-                const { topic, message, key, headers, ingressionTs } = msg
-                const parsedHeaders = this.convertRequestHeadersToKafkaHeaders(headers)
-                const buffer = Buffer.isBuffer(message) ? message : Buffer.from(JSON.stringify(message))
-                this.producer.produce(
-                    topic,
-                    null,
-                    buffer,
-                    key,
-                    ingressionTs || Date.now(),
-                    undefined,
-                    parsedHeaders
-                )
+              await callback({
+                topic,
+                message: message.value?.toString() || '',
+                key: message.key?.toString() || '',
+                headers: message.headers,
+                ingressionTs: Number(message.timestamp),
+              })
+              this.consumeCount += 1
             } catch (err) {
-                this.logger.error({
-                    event: 'Producer - produce err',
-                    err,
-                    data: {
-                        ...msg
-                    }
-                })
+              this.logger.error({
+                event: 'Consumer - callback err',
+                err,
+                data: {
+                  msg: `- ${prefix} ${message.key}`,
+                },
+              })
             }
-        })
+          } else {
+            this.logger.error({
+              event: 'Consumer - callback not found',
+              data: {
+                msg: `- ${prefix} ${message.key}`,
+              },
+            })
+          }
+        },
+      })
+    } catch (err) {
+      this.logger.error({
+        event: 'Consumer - subscribe err',
+        err,
+        data: {
+          ..._topicList,
+        },
+      })
     }
-
-    async subscribe(_topicList: { topic: string, callback: (_msg: QueueMessage) => Promise<void> }[]): Promise<void> {
-        // extract the callback function from the topicList and store it in the consumerList
-        _topicList.forEach((topic) => {
-            this.consumerList.set(topic.topic, topic.callback)
-        })
-        // subscribe to the topics
-        await this.consumer.subscribe(_topicList.map((topic) => topic.topic))
-        await this.consumer.consume()
-    }
-
-    async createTopic(_topicList: { topic: string, partitionNum: number, replicaNum: number, retentionMs: number }[]): Promise<void> {
-        // Create a topic in Kafka
-        try {
-            const admin = new Kafka.AdminClient.create({ ...this.producerConfig, 'client.id': 'kafka-admin', })
-            await Promise.all(_topicList.map(async ({ topic, partitionNum, replicaNum, retentionMs }) => {
-                await admin.createTopic({
-                    topic,
-                    num_partitions: partitionNum || 1,
-                    replication_factor: replicaNum || 1,
-                    config: { 'retention.ms': retentionMs || 86400000 } // 1 day
-                }, (err: any) => {
-                    if (err && !err.message.includes('already exists')) {
-                        this.logger.error({ event: 'KafkaAdmin - createTopic', data: { topic }, err })
-                    } else if (err && err.message.includes('already exists')) {
-                        this.logger.info({
-                            event: 'KafkaAdmin - createTopic',
-                            data: { msg: `Topic (${topic}) already exists, don't need to create and ignore error` }
-                        })
-                    } else {
-                        this.logger.debug({
-                            event: 'KafkaAdmin - createTopic',
-                            data: { msg: `Topic (${topic}) created` }
-                        })
-                    }
-                })
-            }))
-        } catch (err) {
-            this.logger.error({ event: 'KafkaAdmin - createTopic', err })
-        }
-    }
+  }
 }

@@ -171,7 +171,7 @@ await delete('users',
 
 ## TODO
 Currently this only support postgresSQL connection using node-postgres, redis connection using redis.
-Support of message queue, using kafka by node-rdkafka
+Support of message queue, using kafka by kafkajs
 Support of other databases / noSQL database for caching, and RabbitMQ as message queue.
 
 ## Motivations
