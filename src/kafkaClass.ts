@@ -21,7 +21,7 @@ export default class KafkaClass implements QueueClass {
 
   constructor(_config: QueueConfig) {
     // this.config = _config
-    if (_config.client !== 'kafka' || !_config.brokerList || !_config.appName) {
+    if (_config.client !== 'kafka' || _config.brokerList.length <= 0 || !_config.appName) {
       throw new Error('Invalid Kafka config')
     }
     const {

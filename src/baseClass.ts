@@ -30,7 +30,7 @@ export type DBConfig = {
   username: string,
   password: string,
   ssl?: boolean,
-  logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
+  logLevel?: string,
   idleTimeoutMillis?: number,
   minConnection?: number,
   maxConnection?: number,
@@ -97,7 +97,7 @@ export type CacheConfig = {
   tls?: boolean,
   checkServerIdentity?: any,
   cluster?: boolean,
-  logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
+  logLevel?: string,
 }
 
 export interface CacheClass {
@@ -141,7 +141,7 @@ export interface QueueConfig {
   acks?: number,
   msgTimeout?: number,
   compression?: 'gzip' | 'snappy' | 'lz4' | 'zstd', // default is none, only gzip is supported without other pacakages
-  logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
+  logLevel?: string,
 }
 
 export type QueueMessage = {
