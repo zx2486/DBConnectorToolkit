@@ -1,11 +1,9 @@
 import type {
-  Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
+  Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData, CacheClass,
 } from './baseClass'
 
-import { CacheClass } from './redisClass'
-
-// export default class DBConnectorClass implements DBClass {
-export default class DBConnectorClass {
+export default class DBConnectorClass implements DBClass {
+  // export default class DBConnectorClass {
   private masterDB: DBClass
   private replicaDB: DBClass | undefined
   private redis: CacheClass | undefined
@@ -53,6 +51,37 @@ export default class DBConnectorClass {
     return this.masterDB.buildSelectQuery(_table, _fields, _conditions, _order, _limit, _offset)
   }
 
+  buildInsertQuery(_table: string, _data: QueryData[]): Query {
+    return this.masterDB.buildInsertQuery(_table, _data)
+  }
+
+  buildUpdateQuery(
+    _table: string,
+    _data: QueryData[],
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+  ): Query {
+    return this.masterDB.buildUpdateQuery(_table, _data, _conditions)
+  }
+
+  buildUpsertQuery(_table: string, _indexData: string[], _data: QueryData[]): Query {
+    return this.masterDB.buildUpsertQuery(_table, _indexData, _data)
+  }
+
+  buildDeleteQuery(
+    _table: string,
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+  ): Query {
+    return this.masterDB.buildDeleteQuery(_table, _conditions)
+  }
+
+  /**
+   * Run a query to the database, reading from cache if available
+   * @param _query
+   * @param _isWrite, if true, always query to master db as it is a write operation
+   * @param _getLatest, if true, always query to db (slave, master if slave is undefined)
+   * and will not create/update cache.
+   * @returns result of the query
+   */
   async query(_query: Query, _isWrite: boolean = false, _getLatest: boolean = false) {
     if (_isWrite) {
       return this.masterDB.query(_query, _isWrite)

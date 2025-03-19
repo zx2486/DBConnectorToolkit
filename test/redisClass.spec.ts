@@ -4,7 +4,7 @@ import {
 } from 'mocha'
 import sinon from 'ts-sinon'
 import proxyquire from 'proxyquire'
-import { RedisClass } from '../src/redisClass'
+import RedisClass from '../src/redisClass'
 
 const queryCases = [
   {
@@ -129,7 +129,7 @@ describe('redisClass', () => {
           createClient: sinon.stub().returns(clientStub),
           createCluster: sinon.stub().returns(clientStub),
         },
-      }).RedisClass
+      }).default
       redisClass = new StubRedisClass(standaloneConfig)
       redisClass2 = new StubRedisClass(clusterConfig)
       redisClass3 = new StubRedisClass(standaloneConfig)

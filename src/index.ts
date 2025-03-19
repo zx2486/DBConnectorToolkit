@@ -1,15 +1,9 @@
 import type { DBConfig, CacheConfig, DBClass } from './baseClass'
 import PgClass from './dbClass'
 
-import { RedisClass } from './redisClass'
+import RedisClass from './redisClass'
 
 import DBConnectorClass from './dbConnectorClass'
-
-/* type MsgQueueConfig = {
-  host?: string;
-  port?: number;
-};
-*/
 
 const dbConnector = (
   masterConfig: DBConfig,

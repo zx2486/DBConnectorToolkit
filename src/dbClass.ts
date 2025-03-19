@@ -213,8 +213,11 @@ export default class PgClass implements DBClass {
     return this.query(query, false, _getLatest)
   }
 
-  async insert(_table: string, _data: QueryData[]) {
+  buildInsertQuery(_table: string, _data: QueryData[]): Query {
     if (!_table || _table.length < 1 || !_data || _data.length < 1) {
+      this.logger.error({
+        event: 'buildInsertQuery', error: 'Invalid query', table: _table, data: _data,
+      })
       throw new Error('Invalid query')
     }
     PgClass.validateIdentifier(_table)
@@ -231,20 +234,31 @@ export default class PgClass implements DBClass {
     const valueQuery: string = `VALUES (${_data.map((_value, i) => `$${i + 1}`).join(', ')})`
     const values: any[] = _data.map(({ value }) => value)
     const query: Query = { text: `${fieldQuery} ${valueQuery} RETURNING *`, values }
+    return query
+  }
+
+  async insert(_table: string, _data: QueryData[]) {
+    const query = this.buildInsertQuery(_table, _data)
     // Do not validate query for now to save time
     // await this.validateQuery(query)
     return this.query(query, true)
   }
 
-  async update(
+  buildUpdateQuery(
     _table: string,
     _data: QueryData[],
     _conditions?: { array: QueryCondition[], is_or: boolean },
-  ) {
+  ): Query {
     if (!_table || _table.length < 1 || !_data || _data.length < 1) {
+      this.logger.error({
+        event: 'buildUpdateQuery', error: 'Invalid query', table: _table, data: _data, conditions: _conditions,
+      })
       throw new Error('Invalid query')
     }
     if (!_conditions || !_conditions.array || _conditions.array.length < 1) {
+      this.logger.error({
+        event: 'buildUpdateQuery', error: 'Invalid query', table: _table, data: _data, conditions: _conditions,
+      })
       throw new Error('Invalid conditions')
     }
     PgClass.validateIdentifier(_table)
@@ -253,6 +267,9 @@ export default class PgClass implements DBClass {
       PgClass.validateIdentifier(field)
       PgClass.validateValue(value)
       if (fieldSet.has(field)) {
+        this.logger.error({
+          event: 'buildUpdateQuery', error: 'Invalid query', table: _table, data: _data, conditions: _conditions,
+        })
         throw new Error('Duplicate field in data')
       }
       fieldSet.add(field)
@@ -270,18 +287,26 @@ export default class PgClass implements DBClass {
     condition = ` WHERE ${_conditions.array.map((c) => `${c.field} ${c.comparator || '='} $${values.push(c.value)}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`
 
     const query: Query = { text: `${fieldQuery}${condition} RETURNING *`, values }
+    return query
+  }
+
+  async update(
+    _table: string,
+    _data: QueryData[],
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+  ) {
+    const query = this.buildUpdateQuery(_table, _data, _conditions)
     // Do not validate query for now to save time
     // await this.validateQuery(query)
     return this.query(query, true)
   }
 
-  async upsert(
-    _table: string,
-    _indexData: string[],
-    _data: QueryData[],
-  ) {
+  buildUpsertQuery(_table: string, _indexData: string[], _data: QueryData[]): Query {
     if (!_table || _table.length < 1 || !_indexData || _indexData.length < 1
       || !_data || _data.length < 1) {
+      this.logger.error({
+        event: 'buildUpsertQuery', error: 'Invalid query', table: _table, data: _data, indexData: _indexData,
+      })
       throw new Error('Invalid query')
     }
     PgClass.validateIdentifier(_table)
@@ -313,17 +338,35 @@ export default class PgClass implements DBClass {
       .join(', ')}`
     const values: any[] = _data.map(({ value }) => value)
     const query: Query = { text: `${fieldQuery} ${valueQuery} ${conflictQuery} RETURNING *`, values }
+    return query
+  }
+
+  async upsert(
+    _table: string,
+    _indexData: string[],
+    _data: QueryData[],
+  ) {
+    const query = this.buildUpsertQuery(_table, _indexData, _data)
     // Do not validate query for now to save time
     // await this.validateQuery(query)
     return this.query(query, true)
   }
 
-  async delete(_table: string, _conditions?: { array: QueryCondition[], is_or: boolean }) {
+  buildDeleteQuery(
+    _table: string,
+    _conditions?: { array: QueryCondition[], is_or: boolean },
+  ): Query {
     if (!_table || _table.length < 1) {
+      this.logger.error({
+        event: 'buildDeleteQuery', error: 'Invalid query', table: _table, conditions: _conditions,
+      })
       throw new Error('Invalid query')
     }
     PgClass.validateIdentifier(_table)
     if (!_conditions || !_conditions.array || _conditions.array.length < 1) {
+      this.logger.error({
+        event: 'buildDeleteQuery', error: 'Invalid query', table: _table, conditions: _conditions,
+      })
       throw new Error('Invalid conditions')
     }
     let condition = ''
@@ -336,6 +379,11 @@ export default class PgClass implements DBClass {
     condition = ` WHERE ${_conditions.array.map((c) => `${c.field} ${c.comparator || '='} $${values.push(c.value)}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`
 
     const query: Query = { text: `DELETE FROM ${_table}${condition} RETURNING *`, values }
+    return query
+  }
+
+  async delete(_table: string, _conditions?: { array: QueryCondition[], is_or: boolean }) {
+    const query = this.buildDeleteQuery(_table, _conditions)
     // Do not validate query for now to save time
     // await this.validateQuery(query)
     return this.query(query, true)

@@ -1,5 +1,5 @@
 # DBConnectorToolkit
-This module provides an integrated tool to connect database under different settings, single db, master with read replica, with redis for caching, and use message queue to centralize db writes requests.
+This module provides an integrated tool to connect database under different settings, single db, master with read replica, with redis for caching, and allow using message queue to centralize db writes requests.
 The main purpose is to reduce code changes on application with growing traffic and upgrading in infra.
 
 ## Installation
@@ -39,7 +39,7 @@ try {
 }
 ```
 
-Now suppose your application should only have 1-10 concurrent connections to database (so it will not blow up)
+Now suppose your application should only have 1-10 concurrent connections to database (so it will not blow up) and they are managed by a pool
 ```typescript
 const masterDBConfig2 = {
     ...masterDBConfig,
@@ -171,7 +171,7 @@ await delete('users',
 
 ## TODO
 Currently this only support postgresSQL connection using node-postgres, redis connection using redis.
-Support of message queue, using kafka by node-rdkafka
+Support of message queue, using kafka by kafkajs
 Support of other databases / noSQL database for caching, and RabbitMQ as message queue.
 
 ## Motivations
@@ -183,9 +183,9 @@ On the write side, strategies like database sharding / write-through cache / mes
 But they involve complicated setup and change in application coding.
 
 This module intends to minimize the changes required on the coding side when different cache / scaling methods are used.
-Ideally, the developer will write like interacting with a database directly, no matter it is a single db, db with read replica, with cache layer, etc.
+Ideally, the developer will write queries like interacting with a database directly, no matter it is a single db, db with read replica, with cache layer, etc.
 All caching logic is handled inside this module.
-On the write side, it will return the actual result if master database is present and return an UUID (tracking write operations) when there is a message queue.
+On the write side, it will return the actual result if master database is present. It also provides a method to send write queries via message queue and return an UUID if the message queue and message consumer support (for tracking write operations).
 
 It is different from existing libraries like sequelize-redis-cache as this involves different caching logics and also the write part.
 

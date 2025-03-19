@@ -1,21 +1,11 @@
 import { createClient, createCluster } from 'redis'
 import bunyan from 'bunyan'
 import { createHash } from 'crypto'
-import type { Query, QueryResult, CacheConfig } from './baseClass'
+import type {
+  Query, QueryResult, CacheConfig, CacheClass,
+} from './baseClass'
 
-export interface CacheClass {
-  connect(): Promise<void>
-  disconnect(): Promise<void>
-  isconnect(): Promise<boolean>
-  getConfig(): any
-  getPoolClient(): Promise<any>
-  query(_query: Query): Promise<QueryResult>
-  buildCache(_query: Query, _result: QueryResult): Promise<void>
-  clearCache(_query: Query): Promise<void>
-  clearAllCache(): Promise<void>
-}
-
-export class RedisClass implements CacheClass {
+export default class RedisClass implements CacheClass {
   private cacheConfig: any
   private cacheClient: any
   private logger: bunyan
