@@ -140,7 +140,7 @@ export interface QueueConfig {
   enforceRequestTimeout?: boolean,
   acks?: number,
   msgTimeout?: number,
-  compression?: 'gzip' | 'snappy' | 'lz4' | 'zstd', // default is none, only gzip is supported without other pacakages
+  compression?: string, // default is none, only gzip is supported without other pacakages
   logLevel?: string,
 }
 

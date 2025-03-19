@@ -2,9 +2,10 @@ import assert from 'assert'
 import {
   describe, it, before, after,
 } from 'mocha'
+import {
+  logLevel, CompressionTypes, EachMessagePayload,
+} from 'kafkajs'
 import sinon from 'ts-sinon'
-import proxyquire from 'proxyquire'
-import { disconnect } from 'process'
 import KafkaClass from '../src/kafkaClass'
 
 const standaloneConfig = {
@@ -43,6 +44,49 @@ describe('KafkaClass', () => {
       assert.strictEqual(kafkaClass.getConfig().clientId, standaloneConfig.appName)
       assert.strictEqual(kafkaClass.getConfig().brokers, standaloneConfig.brokerList)
     })
+    it('works correctly with optional configs', async () => {
+      const kafkaClass = new KafkaClass({
+        ...standaloneConfig,
+        acks: 1,
+        logLevel: 'debug',
+        compression: 'gzip',
+        msgTimeout: 1000,
+      })
+      assert.strictEqual(kafkaClass.getConfig().clientId, standaloneConfig.appName)
+      assert.strictEqual(kafkaClass.getConfig().brokers, standaloneConfig.brokerList)
+      assert.strictEqual(kafkaClass.getConfig().acks, 1)
+      assert.strictEqual(kafkaClass.getConfig().logLevel, logLevel.DEBUG)
+      assert.strictEqual(kafkaClass.getConfig().compression, CompressionTypes.GZIP)
+      const testConfigs = [
+        {
+          logLevel: 'info',
+          expectedLogLevel: logLevel.INFO,
+          compression: 'snappy',
+          expectedCompression: CompressionTypes.Snappy,
+        },
+        {
+          logLevel: 'warn',
+          expectedLogLevel: logLevel.WARN,
+          compression: 'lz4',
+          expectedCompression: CompressionTypes.LZ4,
+        },
+        {
+          logLevel: 'fatal',
+          expectedLogLevel: logLevel.ERROR,
+          compression: 'zstd',
+          expectedCompression: CompressionTypes.ZSTD,
+        },
+      ]
+      testConfigs.forEach((c) => {
+        const kafkaClassTest = new KafkaClass({
+          ...standaloneConfig,
+          logLevel: c.logLevel,
+          compression: c.compression,
+        })
+        assert.strictEqual(kafkaClassTest.getConfig().logLevel, c.expectedLogLevel)
+        assert.strictEqual(kafkaClassTest.getConfig().compression, c.expectedCompression)
+      })
+    })
   })
 })
 
@@ -53,15 +97,18 @@ describe('KafkaClass functions', () => {
   let loggerStub: sinon.SinonStubbedInstance<any>
   let producerStub: sinon.SinonStubbedInstance<any>
   let consumerStub: sinon.SinonStubbedInstance<any>
+  let expectedCallbackFunction: (_messagePayload: EachMessagePayload) => Promise<void>
 
   before(() => {
     // Stub the logger
     loggerStub = {
       error: sinon.stub(),
       info: sinon.stub(),
+      debug: sinon.stub(),
       createLogger: sinon.stub().returns({
         error: sinon.stub(),
         info: sinon.stub(),
+        debug: sinon.stub(),
       }),
     }
     // Stub the producer and consumer
@@ -73,6 +120,10 @@ describe('KafkaClass functions', () => {
     consumerStub = {
       connect: sinon.stub(),
       disconnect: sinon.stub(),
+      subscribe: sinon.stub(),
+      run: (callback: any) => {
+        expectedCallbackFunction = callback.eachMessage
+      },
     }
 
     kafkaObjStub = {
@@ -220,5 +271,84 @@ describe('KafkaClass functions', () => {
       expectedCalledMessages.topicMessages[1].messages.length,
     )
     assert.strictEqual(kafkaClass.sendCount(), 3)
+  })
+
+  it('Should not able to subscribe if consumer is not connected', async () => {
+    await assert.rejects(
+      async () => {
+        await kafkaClass2.subscribe([{ topic: 'test-topic', callback: async () => { } }])
+      },
+      (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Consumer is not connected')
+        return true
+      },
+    )
+  })
+
+  it('Should not able to subscribe if topicList is empty', async () => {
+    consumerStub.subscribe.resetHistory()
+    await kafkaClass2.connect(false)
+    await kafkaClass2.subscribe([])
+    assert(consumerStub.subscribe.callCount === 0)
+    await kafkaClass2.disconnect(false)
+  })
+
+  it('should subscribe correctly', async () => {
+    let isFirstTopicCalled = false
+    let isSecondTopicCalled = false
+    const topicList = [
+      { topic: 'test-topic', callback: async () => { isFirstTopicCalled = true } },
+      { topic: 'test-topic2', callback: async () => { isSecondTopicCalled = true } },
+      { topic: 'invalid-callback-topic', callback: async () => { throw new Error('error') } },
+    ]
+    consumerStub.subscribe.resetHistory()
+    expectedCallbackFunction = async (_messagePayload: EachMessagePayload) => { }
+    await kafkaClass2.connect(false)
+    await kafkaClass2.subscribe(topicList, true)
+    assert(consumerStub.subscribe.calledOnce)
+    assert.deepEqual(consumerStub.subscribe.getCall(0).args[0], {
+      topics: ['test-topic', 'test-topic2', 'invalid-callback-topic'],
+      fromBeginning: true,
+    })
+    // run function is called so expectedCallbackFunction is set
+    const baseMessagePayload = {
+      topic: 'test-topic',
+      partition: 1,
+      message: {
+        offset: 'offset',
+        timestamp: '1000',
+        attributes: 0,
+        key: Buffer.from('message-key'),
+        headers: {},
+        value: Buffer.from('message_content'),
+      },
+      heartbeat: async () => { },
+      pause: () => () => { },
+    }
+    await expectedCallbackFunction(baseMessagePayload)
+    assert(isFirstTopicCalled)
+    assert(!isSecondTopicCalled)
+    assert.strictEqual(kafkaClass2.receiveCount(), 1)
+    await expectedCallbackFunction({
+      ...baseMessagePayload,
+      topic: 'test-topic2',
+    })
+    assert(isSecondTopicCalled)
+    assert.strictEqual(kafkaClass2.receiveCount(), 2)
+    loggerStub.error.resetHistory()
+    await expectedCallbackFunction({
+      ...baseMessagePayload,
+      topic: 'inexistent-topic',
+    })
+    assert(loggerStub.error.calledOnce)
+    loggerStub.error.resetHistory()
+    await expectedCallbackFunction({
+      ...baseMessagePayload,
+      topic: 'invalid-callback-topic',
+    })
+    assert(loggerStub.error.calledOnce)
+
+    await kafkaClass2.disconnect(false)
   })
 })
