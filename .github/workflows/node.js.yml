@@ -31,7 +31,7 @@ jobs:
 
   update-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') && github.event.head_commit.message != 'Update version'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/development' && github.event.head_commit.message != 'Update version'
     
     steps:
     - name: Checkout repository
@@ -43,13 +43,7 @@ jobs:
         node-version: '16'
     - name: Update version
       run: |
-        if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-          if [[ "${GITHUB_BASE_REF}" == "refs/heads/development" ]]; then
-            npm version patch --no-git-tag-version
-          fi
-        elif [[ "${GITHUB_REF}" == "refs/heads/development" ]]; then
           npm version prerelease --preid=SNAPSHOT --no-git-tag-version
-        fi
 
     - name: Commit and push changes
       run: |
