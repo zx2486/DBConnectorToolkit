@@ -31,8 +31,8 @@ jobs:
 
   update-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
-
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development') && github.event.head_commit.message != 'Update version'
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -41,17 +41,14 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '16'
-
     - name: Update version
       run: |
         if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-          npm version --no-git-tag-version "$(node -p "require('./package.json').version.replace(/-SNAPSHOT-\d+$/, '')")"
-        elif [[ "${GITHUB_REF}" == "refs/heads/development" ]]; then
-          if [[ "${GITHUB_BASE_REF}" == "main" ]]; then
-            npm version --no-git-tag-version "$(node -p "require('./package.json').version.replace(/(\d+)\.(\d+)\.(\d+)/, (_, major, minor, patch) => `${major}.${minor}.${parseInt(patch) + 1}-SNAPSHOT-0`)")"
-          else
-            npm version --no-git-tag-version "$(node -p "require('./package.json').version.replace(/-SNAPSHOT-(\d+)$/, (_, snapshot) => `-SNAPSHOT-${parseInt(snapshot) + 1}`)")"
+          if [[ "${GITHUB_BASE_REF}" == "refs/heads/development" ]]; then
+            npm version patch --no-git-tag-version
           fi
+        elif [[ "${GITHUB_REF}" == "refs/heads/development" ]]; then
+          npm version prerelease --preid=SNAPSHOT --no-git-tag-version
         fi
 
     - name: Commit and push changes
