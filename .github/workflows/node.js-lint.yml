@@ -7,14 +7,16 @@ on:
   push:
     branches: [ "main", "development" ]
   pull_request:
+    types: ["opened", "edited", "reopened", "synchronize"]
     branches: [ "main", "development" ]
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [22.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
@@ -28,28 +30,3 @@ jobs:
     - run: npm run build --if-present
     - run: npm run lint
     - run: npm run test
-
-  update-version:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/development' && github.event.head_commit.message != 'Update version'
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '16'
-    - name: Update version
-      run: |
-          npm version prerelease --preid=SNAPSHOT --no-git-tag-version
-
-    - name: Commit and push changes
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add package.json
-        git add package-lock.json
-        git commit -m "Update version"
-        git push
