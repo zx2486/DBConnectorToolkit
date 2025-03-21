@@ -195,6 +195,10 @@ If you want to contribute to this project, please submit a pull request or creat
 
 Working on README / documentations are also welcomed.
 
+## Versioning
+When a feature is built and merged into development, the version will be updated by prerelease snapshot.
+When a release is going to happen, things will be merged into master. 
+The version will be set mannually and a new tag will be created and package will be published.
 
 ## FAQ / Troubleshooting / Support
 Please open an issue on github.
