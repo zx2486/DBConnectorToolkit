@@ -1,5 +1,5 @@
 import type {
-  Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData, CacheClass,
+  Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, CacheClass,
 } from './baseClass'
 
 export default class DBConnectorClass implements DBClass {
@@ -51,19 +51,19 @@ export default class DBConnectorClass implements DBClass {
     return this.masterDB.buildSelectQuery(_table, _fields, _conditions, _order, _limit, _offset)
   }
 
-  buildInsertQuery(_table: string, _data: QueryData[]): Query {
+  buildInsertQuery(_table: string, _data: Object): Query {
     return this.masterDB.buildInsertQuery(_table, _data)
   }
 
   buildUpdateQuery(
     _table: string,
-    _data: QueryData[],
+    _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean },
   ): Query {
     return this.masterDB.buildUpdateQuery(_table, _data, _conditions)
   }
 
-  buildUpsertQuery(_table: string, _indexData: string[], _data: QueryData[]): Query {
+  buildUpsertQuery(_table: string, _indexData: string[], _data: Object): Query {
     return this.masterDB.buildUpsertQuery(_table, _indexData, _data)
   }
 
@@ -122,19 +122,19 @@ export default class DBConnectorClass implements DBClass {
     return this.query(query, false, _getLatest)
   }
 
-  async insert(_table: string, _data: QueryData[]) {
+  async insert(_table: string, _data: Object) {
     return this.masterDB.insert(_table, _data)
   }
 
   async update(
     _table: string,
-    _data: QueryData[],
+    _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean },
   ) {
     return this.masterDB.update(_table, _data, _conditions)
   }
 
-  async upsert(_table: string, _indexData: string[], _data: QueryData[]) {
+  async upsert(_table: string, _indexData: string[], _data: Object) {
     return this.masterDB.upsert(_table, _indexData, _data)
   }
 

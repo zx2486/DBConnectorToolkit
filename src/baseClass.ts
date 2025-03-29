@@ -60,18 +60,18 @@ export interface DBClass {
     _offset?: number,
     _getLatest?: boolean
   ): Promise<QueryResult>
-  buildInsertQuery(_table: string, _data: QueryData[]): Query
-  insert(_table: string, _data: QueryData[]): Promise<QueryResult>
+  buildInsertQuery(_table: string, _data: Object): Query
+  insert(_table: string, _data: Object): Promise<QueryResult>
   buildUpdateQuery(
     _table: string,
-    _data: QueryData[],
+    _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean }
   ): Query
-  update(_table: string, _data: QueryData[],
+  update(_table: string, _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean }
   ): Promise<QueryResult>
-  buildUpsertQuery(_table: string, _indexData: string[], _data: QueryData[]): Query
-  upsert(_table: string, _indexData: string[], _data: QueryData[]): Promise<QueryResult>
+  buildUpsertQuery(_table: string, _indexData: string[], _data: Object): Query
+  upsert(_table: string, _indexData: string[], _data: Object): Promise<QueryResult>
   buildDeleteQuery(_table: string, _conditions?: { array: QueryCondition[], is_or: boolean }): Query
   delete(_table: string,
     _conditions?: { array: QueryCondition[], is_or: boolean }

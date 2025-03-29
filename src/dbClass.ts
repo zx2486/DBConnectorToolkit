@@ -80,7 +80,7 @@ export default class PgClass implements DBClass {
     }
     try {
       const result = await this.pool.query(_query.text, _query.values)
-      return { rows: result, count: result.length || 0, ttl: undefined }
+      return { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
     } catch (err) {
       this.logger.error({ event: 'query', err })
       throw new Error('Invalid SQL query')
@@ -89,7 +89,7 @@ export default class PgClass implements DBClass {
 
   // Validate inputs to not allow SQL injection
   static validateIdentifier = (identifier: string) => {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)?$|^\*$/.test(identifier)) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)?( as [a-zA-Z0-9_]+)?$|^\*$/.test(identifier)) {
       throw new Error(`Invalid identifier: ${identifier}`)
     }
   }
@@ -213,8 +213,20 @@ export default class PgClass implements DBClass {
     return this.query(query, false, _getLatest)
   }
 
-  buildInsertQuery(_table: string, _data: QueryData[]): Query {
-    if (!_table || _table.length < 1 || !_data || _data.length < 1) {
+  objectToQueryData(_data: Object): QueryData[] {
+    const entries = Object.entries(_data)
+    if (!entries || !Array.isArray(entries) || entries.length < 1) {
+      this.logger.error({
+        event: 'objectToQueryData', error: 'Invalid data', data: _data,
+      })
+      throw new Error('Invalid query')
+    }
+    return entries.map(([field, value]) => ({ field, value }))
+  }
+
+  buildInsertQuery(_table: string, _data: Object): Query {
+    const data = this.objectToQueryData(_data)
+    if (!_table || _table.length < 1 || !data || data.length < 1) {
       this.logger.error({
         event: 'buildInsertQuery', error: 'Invalid query', table: _table, data: _data,
       })
@@ -222,7 +234,8 @@ export default class PgClass implements DBClass {
     }
     PgClass.validateIdentifier(_table)
     const fieldSet = new Set() // Check for duplicate fields
-    _data.forEach(({ field, value }) => {
+    data.forEach((singleData) => {
+      const { field, value } = singleData
       PgClass.validateIdentifier(field)
       PgClass.validateValue(value)
       if (fieldSet.has(field)) {
@@ -230,14 +243,14 @@ export default class PgClass implements DBClass {
       }
       fieldSet.add(field)
     })
-    const fieldQuery: string = `INSERT INTO ${_table} (${_data.map(({ field }) => field).join(', ')})`
-    const valueQuery: string = `VALUES (${_data.map((_value, i) => `$${i + 1}`).join(', ')})`
-    const values: any[] = _data.map(({ value }) => value)
+    const fieldQuery: string = `INSERT INTO ${_table} (${data.map(({ field }) => field).join(', ')})`
+    const valueQuery: string = `VALUES (${data.map((_value, i) => `$${i + 1}`).join(', ')})`
+    const values: any[] = data.map(({ value }) => value)
     const query: Query = { text: `${fieldQuery} ${valueQuery} RETURNING *`, values }
     return query
   }
 
-  async insert(_table: string, _data: QueryData[]) {
+  async insert(_table: string, _data: Object) {
     const query = this.buildInsertQuery(_table, _data)
     // Do not validate query for now to save time
     // await this.validateQuery(query)
@@ -246,10 +259,11 @@ export default class PgClass implements DBClass {
 
   buildUpdateQuery(
     _table: string,
-    _data: QueryData[],
+    _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean },
   ): Query {
-    if (!_table || _table.length < 1 || !_data || _data.length < 1) {
+    const data = this.objectToQueryData(_data)
+    if (!_table || _table.length < 1 || !data || data.length < 1) {
       this.logger.error({
         event: 'buildUpdateQuery', error: 'Invalid query', table: _table, data: _data, conditions: _conditions,
       })
@@ -263,7 +277,7 @@ export default class PgClass implements DBClass {
     }
     PgClass.validateIdentifier(_table)
     const fieldSet = new Set() // Check for duplicate fields
-    _data.forEach(({ field, value }) => {
+    data.forEach(({ field, value }) => {
       PgClass.validateIdentifier(field)
       PgClass.validateValue(value)
       if (fieldSet.has(field)) {
@@ -275,8 +289,8 @@ export default class PgClass implements DBClass {
       fieldSet.add(field)
     })
 
-    const fieldQuery: string = `UPDATE ${_table} SET ${_data.map(({ field }, i) => `${field} = $${i + 1}`).join(', ')}`
-    const values: any[] = _data.map(({ value }) => value)
+    const fieldQuery: string = `UPDATE ${_table} SET ${data.map(({ field }, i) => `${field} = $${i + 1}`).join(', ')}`
+    const values: any[] = data.map(({ value }) => value)
     let condition = ''
 
     _conditions.array.forEach((c) => {
@@ -292,7 +306,7 @@ export default class PgClass implements DBClass {
 
   async update(
     _table: string,
-    _data: QueryData[],
+    _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean },
   ) {
     const query = this.buildUpdateQuery(_table, _data, _conditions)
@@ -301,9 +315,10 @@ export default class PgClass implements DBClass {
     return this.query(query, true)
   }
 
-  buildUpsertQuery(_table: string, _indexData: string[], _data: QueryData[]): Query {
+  buildUpsertQuery(_table: string, _indexData: string[], _data: Object): Query {
+    const data = this.objectToQueryData(_data)
     if (!_table || _table.length < 1 || !_indexData || _indexData.length < 1
-      || !_data || _data.length < 1) {
+      || !data || data.length < 1) {
       this.logger.error({
         event: 'buildUpsertQuery', error: 'Invalid query', table: _table, data: _data, indexData: _indexData,
       })
@@ -312,7 +327,7 @@ export default class PgClass implements DBClass {
     PgClass.validateIdentifier(_table)
     _indexData.forEach(PgClass.validateIdentifier)
     const fieldSet = new Set() // Check for duplicate fields
-    _data.forEach(({ field, value }) => {
+    data.forEach(({ field, value }) => {
       PgClass.validateIdentifier(field)
       PgClass.validateValue(value)
       if (fieldSet.has(field)) {
@@ -322,21 +337,21 @@ export default class PgClass implements DBClass {
     })
     // Check that all values in _indexData can be found inside the field of the _data array
     _indexData.forEach((indexField) => {
-      if (!_data.find(({ field }) => field === indexField)) {
+      if (!data.find(({ field }) => field === indexField)) {
         throw new Error(`Index field ${indexField} not found in data fields`)
       }
     })
     // Check that there are field of the _data array cannot be found in _indexData
-    const excludedFields = _data.filter(({ field }) => !_indexData.includes(field))
+    const excludedFields = data.filter(({ field }) => !_indexData.includes(field))
     if (excludedFields.length < 1) {
       throw new Error('No data fields to update')
     }
-    const fieldQuery: string = `INSERT INTO ${_table} (${_data.map(({ field }) => field).join(', ')})`
-    const valueQuery: string = `VALUES (${_data.map((_value, i) => `$${i + 1}`).join(', ')})`
+    const fieldQuery: string = `INSERT INTO ${_table} (${data.map(({ field }) => field).join(', ')})`
+    const valueQuery: string = `VALUES (${data.map((_value, i) => `$${i + 1}`).join(', ')})`
     const conflictQuery: string = `ON CONFLICT (${_indexData.join(', ')}) DO UPDATE SET ${excludedFields
       .map(({ field }) => `${field} = EXCLUDED.${field}`)
       .join(', ')}`
-    const values: any[] = _data.map(({ value }) => value)
+    const values: any[] = data.map(({ value }) => value)
     const query: Query = { text: `${fieldQuery} ${valueQuery} ${conflictQuery} RETURNING *`, values }
     return query
   }
@@ -344,7 +359,7 @@ export default class PgClass implements DBClass {
   async upsert(
     _table: string,
     _indexData: string[],
-    _data: QueryData[],
+    _data: Object,
   ) {
     const query = this.buildUpsertQuery(_table, _indexData, _data)
     // Do not validate query for now to save time

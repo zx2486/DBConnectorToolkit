@@ -139,25 +139,25 @@ await select(
     2
 )
 
-insert(_table: string, _data: QueryData[]): Promise<QueryResult>
+insert(_table: string, _data: Object): Promise<QueryResult>
 // example 'INSERT INTO users (name, age) VALUES ($1, $2) RETURNING *', values:['test',30]
-await insert('users', [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }]) 
+await insert('users', { name: 'test', age: 30 }) 
 
-update(_table: string, _data: QueryData[],
+update(_table: string, _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean }
 ): Promise<QueryResult>
 // example 'UPDATE users SET name = $1, age = $2 WHERE id <= $3 AND active != $4 RETURNING *', values:['test', 30, 1, true]
-await update('users',[{ field: 'name', value: 'test' }, { field: 'age', value: 30 }]
+await update('users', {name:'test', age: 30}
     { array: [
         { field: 'id', comparator: '<=', value: 1 }, 
         { field: 'active', comparator: '!=', value: true }
     ], is_or: false }
 )
 
-upsert(_table: string, _indexData: string[], _data: QueryData[]): Promise<QueryResult>
+upsert(_table: string, _indexData: string[], _data: Object): Promise<QueryResult>
 // example: 'INSERT INTO users (id, name, age) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age RETURNING *', values: [1, 'test', 30]
 await upsert('users',['id'],
-    [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+    {id: 1, name: 'test', age: 30},
 )
 
 delete(_table: string,

@@ -638,7 +638,7 @@ describe('PgClass', () => {
 
       // Stub the query method to run the special function
       poolStub.query.callsFake(async (text: any, values: any) => (
-        [{ id: 1, debug_text: text, debug_values: values }]
+        { rows: [{ id: 1, debug_text: text, debug_values: values }], rowCount: 1 }
       ))
     })
 
@@ -667,19 +667,19 @@ describe('PgClass', () => {
       const insertCases = [
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           expected: 'INSERT INTO users (name) VALUES ($1) RETURNING *',
           values: ['test'],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { name: 'test', age: 30 },
           expected: 'INSERT INTO users (name, age) VALUES ($1, $2) RETURNING *',
           values: ['test', 30],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }],
+          data: { name: 'test', age: 30, active: true },
           expected: 'INSERT INTO users (name, age, active) VALUES ($1, $2, $3) RETURNING *',
           values: ['test', 30, true],
         },
@@ -693,7 +693,7 @@ describe('PgClass', () => {
       const failedCases = [
         {
           table: '',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           errMsg: 'Invalid query',
         },
         {
@@ -703,17 +703,12 @@ describe('PgClass', () => {
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: { a: 1 } }],
+          data: { name: 'test', age: 30, active: { a: 1 } },
           errMsg: 'Invalid value',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }, { field: 'age', value: 30 }],
-          errMsg: 'Duplicate field in data',
-        },
-        {
-          table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active; SELECT 1;', value: true }],
+          data: { name: 'test', age: 30, 'active; SELECT 1;': true },
           errMsg: 'Invalid identifier: active; SELECT 1;',
         },
       ]
@@ -736,21 +731,21 @@ describe('PgClass', () => {
       const updateCases = [
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           expected: 'UPDATE users SET name = $1 WHERE id = $2 RETURNING *',
           values: ['test', 1],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { name: 'test', age: 30 },
           conditions: { array: [{ field: 'id', comparator: '<=', value: 1 }, { field: 'active', comparator: '!=', value: true }], is_or: false },
           expected: 'UPDATE users SET name = $1, age = $2 WHERE id <= $3 AND active != $4 RETURNING *',
           values: ['test', 30, 1, true],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'active', value: true }],
+          data: { name: 'test', active: true },
           conditions: { array: [{ field: 'id', comparator: '<>', value: 1 }, { field: 'age', comparator: '>', value: 30 }], is_or: true },
           expected: 'UPDATE users SET name = $1, active = $2 WHERE id <> $3 OR age > $4 RETURNING *',
           values: ['test', true, 1, 30],
@@ -765,7 +760,7 @@ describe('PgClass', () => {
       const failedCases = [
         {
           table: '',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid query',
         },
@@ -777,37 +772,31 @@ describe('PgClass', () => {
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: { a: 1 } }],
+          data: { name: 'test', age: 30, active: { a: 1 } },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid value',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }, { field: 'age', value: 30 }],
-          conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
-          errMsg: 'Duplicate field in data',
-        },
-        {
-          table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active; SELECT 1;', value: true }],
+          data: { name: 'test', age: 30, 'active; SELECT 1;': true },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid identifier: active; SELECT 1;',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '===', value: 1 }], is_or: false },
           errMsg: 'Invalid comparator: ===',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [], is_or: false },
           errMsg: 'Invalid conditions',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }, { field: '', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid identifier: ',
         },
@@ -832,28 +821,30 @@ describe('PgClass', () => {
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id: 1, name: 'test' },
           expected: 'INSERT INTO users (id, name) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name RETURNING *',
           values: [1, 'test'],
         },
         {
           table: 'users',
           indexData: ['id', 'name'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { id: 1, name: 'test', age: 30 },
           expected: 'INSERT INTO users (id, name, age) VALUES ($1, $2, $3) ON CONFLICT (id, name) DO UPDATE SET age = EXCLUDED.age RETURNING *',
           values: [1, 'test', 30],
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { id: 1, name: 'test', age: 30 },
           expected: 'INSERT INTO users (id, name, age) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age RETURNING *',
           values: [1, 'test', 30],
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }],
+          data: {
+            id: 1, name: 'test', age: 30, active: true,
+          },
           expected: 'INSERT INTO users (id, name, age, active) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age, active = EXCLUDED.active RETURNING *',
           values: [1, 'test', 30, true],
         },
@@ -868,13 +859,13 @@ describe('PgClass', () => {
         {
           table: '',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id: 1, name: 'test' },
           errMsg: 'Invalid query',
         },
         {
           table: 'users',
           indexData: [],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id: 1, name: 'test' },
           errMsg: 'Invalid query',
         },
         {
@@ -886,31 +877,29 @@ describe('PgClass', () => {
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: { a: 1 } }],
+          data: {
+            id: 1, name: 'test', age: 30, active: { a: 1 },
+          },
           errMsg: 'Invalid value',
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }, { field: 'age', value: 30 }],
-          errMsg: 'Duplicate field in data',
-        },
-        {
-          table: 'users',
-          indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active; SELECT 1;', value: true }],
+          data: {
+            id: 1, name: 'test', age: 30, 'active; SELECT 1;': true,
+          },
           errMsg: 'Invalid identifier: active; SELECT 1;',
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id2', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id2: 1, name: 'test' },
           errMsg: 'Index field id not found in data fields',
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }],
+          data: { id: 1 },
           errMsg: 'No data fields to update',
         },
       ]
