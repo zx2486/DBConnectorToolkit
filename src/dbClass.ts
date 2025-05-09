@@ -31,9 +31,10 @@ export default class PgClass implements DBClass {
     }
     this.pool = new Pool(options)
       .on('error', (err: any) => { this.logger.error({ event: 'PGPool - constructor - error', err }) })
-      .on('connect', () => { this.logger.info({ event: 'PGPool - constructor - connect' }) })
+      .on('connect', () => { this.logger.info({ event: 'PGPool - constructor - connect', connectionCount: this.pool.totalCount }) })
       .on('acquire', () => { this.logger.info({ event: 'PGPool - constructor - acquire' }) })
-      .on('remove', () => { this.logger.info({ event: 'PGPool - constructor - remove' }) })
+      .on('release', () => { this.logger.info({ event: 'PGPool - constructor - release' }) })
+      .on('remove', () => { this.logger.info({ event: 'PGPool - constructor - remove', connectionCount: this.pool.totalCount }) })
     this.logger.info({ event: `Pool (${this.dbConfig.endpoint}:${this.dbConfig.port}) is ready` })
   }
 

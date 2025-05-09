@@ -98,6 +98,8 @@ export type CacheConfig = {
   checkServerIdentity?: any,
   cluster?: boolean,
   logLevel?: string,
+  slotsRefreshTimeout?: number, // timeout on topology refresh, only work with cluster is true
+  slotsRefreshInterval?: number, // inteval on topology refresh, only work with cluster is true
 }
 
 export interface CacheClass {

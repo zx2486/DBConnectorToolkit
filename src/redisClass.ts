@@ -43,6 +43,12 @@ export default class RedisClass implements CacheClass {
       cacheTTL: _config.cacheTTL || 3600,
       revalidate: _config.revalidate || 60,
     }
+    if (_config.cluster) {
+      this.cacheConfig.options.cluster = {
+        slotsRefreshTimeout: _config.slotsRefreshTimeout || 10000, // Default to 10 seconds
+        slotsRefreshInterval: _config.slotsRefreshInterval || 30000, // Default to 30 seconds
+      }
+    }
     if (_config.username && _config.password) {
       this.cacheConfig.options.username = _config.username
       this.cacheConfig.options.password = _config.password
@@ -64,15 +70,19 @@ export default class RedisClass implements CacheClass {
             rootNodes: (this.cacheConfig.nodeList)
               ? this.cacheConfig.nodeList.map((url: string) => ({ url: `redis://${url}` }))
               : [{ url: `redis://${this.cacheConfig.url}` }],
+            useReplicas: !!(this.cacheConfig.nodeList),
           })
           : createClient({
             url: this.cacheConfig.url, ...this.cacheConfig.options, legacyMode: false,
           })
-        const logList = ['error', 'reconnecting', 'end', 'ready', 'connect']
+        const logList = ['reconnecting', 'end', 'ready', 'connect']
         logList.forEach((event) => {
           newClient.on(event, (err: any) => {
-            this.logger.error({ event: `Redis (${this.cacheConfig.url}) ${event}`, err })
+            this.logger.info({ event: `Redis (${this.cacheConfig.url}) ${event}`, err })
           })
+        })
+        newClient.on('error', (err: any) => {
+          this.logger.error({ event: `Redis (${this.cacheConfig.url}) error`, err })
         })
 
         await newClient.connect()
@@ -142,7 +152,18 @@ export default class RedisClass implements CacheClass {
   async buildCache(_query: Query, _result: QueryResult, customTTL?: number) {
     if (!this.cacheClient) await this.connect()
     const hashKey = `${this.cacheConfig.cacheHeader}${RedisClass.hashkeyOf(_query)}`
-    await this.cacheClient.set(hashKey, _result, customTTL || this.cacheConfig.cacheTTL)
+    // get a lock to make sure only one process is writing to the cache
+    const lockKey = `${hashKey}:lock`
+    const lockTTL = 10000 // 10s
+    const lock = await this.cacheClient.set(lockKey, '1', {
+      EX: lockTTL,
+      NX: true,
+    })
+    if (lock === 'OK') {
+      this.logger.info({ event: 'Redis cache set', hashKey })
+      await this.cacheClient.set(hashKey, _result, customTTL || this.cacheConfig.cacheTTL)
+      await this.cacheClient.del(lockKey)
+    }
   }
 
   async clearCache(_query: Query) {
