@@ -95,12 +95,6 @@ export default class PgClass implements DBClass {
     }
   }
 
-  static validateComparator = (comparator: string) => {
-    if (!/^(=|!=|<>|<|<=|>|>=)$/.test(comparator)) {
-      throw new Error(`Invalid comparator: ${comparator}`)
-    }
-  }
-
   static validateValue = (value: any) => {
     // check if value is a string, number, or boolean
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
@@ -112,6 +106,56 @@ export default class PgClass implements DBClass {
     if (!/^(INNER|LEFT|RIGHT|FULL)$/.test(joinType)) {
       throw new Error(`Invalid join type: ${joinType}`)
     }
+  }
+
+  static queryConditionToString = (
+    _conditions: { array: QueryCondition[], is_or: boolean },
+    valueCount: number = 0,
+  ): { condition: string, conditionV: any[] } => {
+    const conditionV: any[] = []
+    if (_conditions && _conditions.array && _conditions.array.length > 0) {
+      const conditionStrict:
+        { field: string, comparator: string, value: any }[] = _conditions.array.map((c) => {
+          if (Array.isArray(c) && c.length === 3) {
+            // example use case: ['field', '=', 'value']
+            PgClass.validateIdentifier(c[0])
+            if (!/^(=|!=|<>|<|<=|>|>=)$/.test(c[1])) {
+              throw new Error(`Invalid comparator: ${c[1]}`)
+            }
+            PgClass.validateValue(c[2])
+            return { field: c[0], comparator: c[1], value: c[2] }
+          }
+          if (Array.isArray(c) && c.length === 2) {
+            // example use case: ['field', 'value'], or ['field', 'IS NULL']
+            PgClass.validateIdentifier(c[0])
+            if (typeof c[1] === 'string'
+              && /^(IS|IS NOT) (NULL|TRUE|FALSE|UNKNOWN)$/.test(c[1])) {
+              return { field: c[0], comparator: c[1], value: '' }
+            }
+            PgClass.validateValue(c[1])
+            return { field: c[0], comparator: '=', value: c[1] }
+          }
+          // if c is an object { field: string, comparator: string, value: any }
+          if (typeof c === 'object' && typeof c.field === 'string') {
+            PgClass.validateIdentifier(c.field)
+            if (c.comparator) {
+              if (!/^(=|!=|<>|<|<=|>|>=)$/.test(c.comparator)) {
+                throw new Error(`Invalid comparator: ${c.comparator}`)
+              }
+            }
+            PgClass.validateValue(c.value)
+            return { field: c.field, comparator: c.comparator || '=', value: c.value }
+          }
+          throw new Error(`Invalid condition: ${JSON.stringify(c)}`)
+        })
+      if (conditionStrict.length > 0) {
+        return {
+          condition: ` WHERE ${conditionStrict.map((c) => `${c.field} ${c.comparator || '='}${(c.value) ? ` $${conditionV.push(c.value) + valueCount}` : ''}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`,
+          conditionV,
+        }
+      }
+    }
+    return { condition: '', conditionV }
   }
 
   async validateQuery(query: Query): Promise<void> {
@@ -164,15 +208,8 @@ export default class PgClass implements DBClass {
       tableQuery += _table.slice(1).map((t) => ` ${t.join_type ? `${t.join_type} JOIN` : ''} ${t.table}${t.name ? ` AS ${t.name}` : ''} ON ${t.on ? t.on.map(({ left, right }) => `${left} = ${right}`).join(' AND ') : 'TRUE'}`).join('')
     }
     const values: any[] = []
-    let condition = ''
-    if (_conditions && _conditions.array && _conditions.array.length > 0) {
-      _conditions.array.forEach((c) => {
-        PgClass.validateIdentifier(c.field)
-        if (c.comparator) PgClass.validateComparator(c.comparator)
-        PgClass.validateValue(c.value)
-      })
-      condition = ` WHERE ${_conditions.array.map((c) => `${c.field} ${c.comparator || '='} $${values.push(c.value)}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`
-    }
+    const { condition, conditionV } = (_conditions) ? PgClass.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
+    values.push(...conditionV)
     let order = ''
     if (_order && _order.length > 0) {
       _order.forEach((o) => PgClass.validateIdentifier(o.field))
@@ -292,14 +329,8 @@ export default class PgClass implements DBClass {
 
     const fieldQuery: string = `UPDATE ${_table} SET ${data.map(({ field }, i) => `${field} = $${i + 1}`).join(', ')}`
     const values: any[] = data.map(({ value }) => value)
-    let condition = ''
-
-    _conditions.array.forEach((c) => {
-      PgClass.validateIdentifier(c.field)
-      if (c.comparator) PgClass.validateComparator(c.comparator)
-      PgClass.validateValue(c.value)
-    })
-    condition = ` WHERE ${_conditions.array.map((c) => `${c.field} ${c.comparator || '='} $${values.push(c.value)}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`
+    const { condition, conditionV } = (_conditions) ? PgClass.queryConditionToString(_conditions, values.length) : { condition: '', conditionV: [] }
+    values.push(...conditionV)
 
     const query: Query = { text: `${fieldQuery}${condition} RETURNING *`, values }
     return query
@@ -385,14 +416,9 @@ export default class PgClass implements DBClass {
       })
       throw new Error('Invalid conditions')
     }
-    let condition = ''
     const values: any[] = []
-    _conditions.array.forEach((c) => {
-      PgClass.validateIdentifier(c.field)
-      if (c.comparator) PgClass.validateComparator(c.comparator)
-      PgClass.validateValue(c.value)
-    })
-    condition = ` WHERE ${_conditions.array.map((c) => `${c.field} ${c.comparator || '='} $${values.push(c.value)}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`
+    const { condition, conditionV } = (_conditions) ? PgClass.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
+    values.push(...conditionV)
 
     const query: Query = { text: `DELETE FROM ${_table}${condition} RETURNING *`, values }
     return query

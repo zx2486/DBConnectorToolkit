@@ -20,6 +20,8 @@ export type TableWithJoin = {
 }
 export type QueryData = { field: string, value: any }
 export type QueryCondition = { field: string, comparator?: string, value: any }
+  | any[3] | any[2]
+// | [string, string, string | number | boolean] | [string, string | number | boolean]
 export type QueryOrder = { field: string, is_asc: boolean }
 
 export type DBConfig = {
