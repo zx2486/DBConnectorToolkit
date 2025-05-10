@@ -56,7 +56,7 @@ const slaveDBConfig = {
 }
 const dbConnector = new DBConnectorClass(masterDBConfig, slaveDBConfig)
 ```
-All selected queries will go to replica and write queries will go to master. No other code change is needed.
+All select queries will go to replica and write queries will go to master. No other code change is needed.
 
 Now the traffic is even higher, redis is introduced as cache layer. How many code changes?
 ```typescript
@@ -86,8 +86,8 @@ The most basic one, running raw queries:
     values: any[]
     }
     for example, { text: 'SELECT id, username FROM users WHERE age > $1 AND status = $2 ORDER BY modified DESC', values: [18,true] }
- * @param _isWrite, default is false, true means the query will be handled by master db
- * @param _getLatest, default is false, true means the query result will not come from cache or will not be saved in cache
+ * @param _isWrite, default is false, true if the query should be handled by master db. Otherwise replica db and cache are preferred.
+ * @param _getLatest, default is false, true means the query result will not come from cache
  * @returns 
  */
 query(_query: Query, _isWrite?: boolean, _getLatest?: boolean): Promise<QueryResult>
@@ -131,8 +131,8 @@ await select(
     ],
     ['u.id', 'u.name', 'up.profile_picture', 'uer.entity'],
     { array: [
-        { field: 'u.active', comparator: '=', value: true }, 
-        { field: 'uer.entity_category', comparator: '=', value: 'system' }
+        ['u.active', true ], 
+        ['uer.entity_category', '=', 'system']
     ], is_or: true },
     [{ field: 'u.created_at', is_asc: false }],
     10,
