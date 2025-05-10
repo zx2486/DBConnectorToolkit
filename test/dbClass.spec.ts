@@ -226,7 +226,11 @@ describe('PgClass', () => {
 
       // Stub the query method to run the special function
       poolStub.connect.callsFake(async () => ({
-        release: sinon.stub(), removeAllListeners: sinon.stub(),
+        release: sinon.stub(),
+        removeAllListeners: sinon.stub(),
+        query: sinon.stub().callsFake(async () => (
+          { rows: [{ id: 1 }], rowsCount: 1 }
+        )),
       }))
       poolStub.end.callsFake(async () => ({}))
       poolStub.query.callsFake(async () => ({}))
@@ -244,6 +248,13 @@ describe('PgClass', () => {
       assert(Object.keys(clientStub).length === 1)
     })
 
+    it('should get a client from the pool', async () => {
+      poolStub.connect.resetHistory()
+      const client = await pgClass.getRawClient()
+      assert(poolStub.connect.calledOnce)
+      assert.deepStrictEqual(await client.query(), { rows: [{ id: 1 }], rowsCount: 1 })
+    })
+
     it('should log an error and throw when connection fails', async () => {
       const error = new Error('Connection failed')
       poolStub.connect.rejects(error)
@@ -257,6 +268,21 @@ describe('PgClass', () => {
         return true
       })
       assert(loggerStub.error.calledWith({ event: 'PGPool - connect', err: error }))
+    })
+
+    it('should log an error and throw when get raw client fails', async () => {
+      const error = new Error('Connection failed')
+      poolStub.connect.rejects(error)
+      loggerStub.error.resetHistory()
+
+      await assert.rejects(async () => {
+        await pgClass.getRawClient()
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Failed to get db client')
+        return true
+      })
+      assert(loggerStub.error.calledWith({ event: 'PGPool - getRawClient', err: error }))
     })
 
     it('should disconnect from the database', async () => {

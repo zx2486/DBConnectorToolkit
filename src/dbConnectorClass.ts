@@ -40,6 +40,10 @@ export default class DBConnectorClass implements DBClass {
     ).then((results) => results.every((result) => result))
   }
 
+  async getRawClient() {
+    return this.masterDB.getRawClient()
+  }
+
   buildSelectQuery(
     _table: TableWithJoin[],
     _fields: string[],
@@ -77,7 +81,8 @@ export default class DBConnectorClass implements DBClass {
   /**
    * Run a query to the database, reading from cache if available
    * @param _query
-   * @param _isWrite, if true, always query to master db as it is a write operation
+   * @param _isWrite, if true, always query to master db as it is a write operation,
+   * query will go to replica if this is false and replica db is available
    * @param _getLatest, if true, always query to db (slave, master if slave is undefined)
    * and will not create/update cache.
    * @returns result of the query

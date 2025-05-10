@@ -88,6 +88,17 @@ export default class PgClass implements DBClass {
     }
   }
 
+  async getRawClient(): Promise<any> {
+    try {
+      const clientId: string = uuidv4()
+      this.clients[clientId] = await this.pool.connect()
+      return this.clients[clientId]
+    } catch (err) {
+      this.logger.error({ event: 'PGPool - getRawClient', err })
+      throw new Error('Failed to get db client')
+    }
+  }
+
   // Validate inputs to not allow SQL injection
   static validateIdentifier = (identifier: string) => {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)?( as [a-zA-Z0-9_]+)?$|^\*$/.test(identifier)) {
@@ -119,7 +130,7 @@ export default class PgClass implements DBClass {
           if (Array.isArray(c) && c.length === 3) {
             // example use case: ['field', '=', 'value']
             PgClass.validateIdentifier(c[0])
-            if (!/^(=|!=|<>|<|<=|>|>=)$/.test(c[1])) {
+            if (!/^(=|!=|<>|<|<=|>|>=|LIKE|ILIKE)$/.test(c[1])) {
               throw new Error(`Invalid comparator: ${c[1]}`)
             }
             PgClass.validateValue(c[2])
@@ -139,7 +150,7 @@ export default class PgClass implements DBClass {
           if (typeof c === 'object' && typeof c.field === 'string') {
             PgClass.validateIdentifier(c.field)
             if (c.comparator) {
-              if (!/^(=|!=|<>|<|<=|>|>=)$/.test(c.comparator)) {
+              if (!/^(=|!=|<>|<|<=|>|>=|LIKE|ILIKE)$/.test(c.comparator)) {
                 throw new Error(`Invalid comparator: ${c.comparator}`)
               }
             }
