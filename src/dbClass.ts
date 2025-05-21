@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { Pool } from 'pg'
 import type {
   Query, DBConfig, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
+  QueryResult,
 } from './baseClass'
 
 export default class PgClass implements DBClass {
@@ -84,7 +85,8 @@ export default class PgClass implements DBClass {
       return { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
     } catch (err) {
       this.logger.error({ event: 'query', err })
-      throw new Error('Invalid SQL query')
+      // throw new Error('Invalid SQL query')
+      throw err
     }
   }
 
@@ -96,6 +98,40 @@ export default class PgClass implements DBClass {
     } catch (err) {
       this.logger.error({ event: 'PGPool - getRawClient', err })
       throw new Error('Failed to get db client')
+    }
+  }
+
+  async transaction(_callbacks: (
+    (_previousResult: QueryResult, _client: any) => Promise<QueryResult>
+  )[]): Promise<QueryResult> {
+    if (!_callbacks || !Array.isArray(_callbacks) || _callbacks.length < 1) {
+      this.logger.error({ event: 'transaction', error: 'Invalid callbacks' })
+      throw new Error('Invalid transaction callbacks')
+    }
+    let client: any
+    try {
+      const clientId: string = uuidv4()
+      this.clients[clientId] = await this.pool.connect()
+      client = this.clients[clientId]
+      await client.query('BEGIN')
+      let previousResult: QueryResult = { rows: [], count: 0, ttl: undefined }
+      previousResult = await _callbacks.reduce(async (accPromise, callback) => {
+        const acc = await accPromise
+        console.log('run a callback', acc)
+        return callback(acc, client)
+      }, Promise.resolve(previousResult))
+      await client.query('COMMIT')
+      return previousResult
+    } catch (err) {
+      if (client) {
+        await client.query('ROLLBACK')
+      }
+      this.logger.error({ event: 'transaction', err })
+      throw new Error('Failed to run transaction')
+    } finally {
+      if (client) {
+        await client.release()
+      }
     }
   }
 
@@ -174,7 +210,8 @@ export default class PgClass implements DBClass {
       await this.pool.query(`EXPLAIN ${query.text}`, query.values)
     } catch (err) {
       this.logger.error({ event: 'validateQuery', err })
-      throw new Error('Invalid SQL query')
+      // throw new Error('Invalid SQL query')
+      throw err
     }
   }
 

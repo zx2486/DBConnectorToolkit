@@ -44,6 +44,12 @@ export default class DBConnectorClass implements DBClass {
     return this.masterDB.getRawClient()
   }
 
+  async transaction(_callbacks: (
+    (_previousResult: QueryResult, _client: any) => Promise<QueryResult>
+  )[]): Promise<QueryResult> {
+    return this.masterDB.transaction(_callbacks)
+  }
+
   buildSelectQuery(
     _table: TableWithJoin[],
     _fields: string[],

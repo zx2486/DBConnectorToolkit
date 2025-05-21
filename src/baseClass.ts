@@ -139,6 +139,19 @@ export interface DBClass {
     _conditions?: { array: QueryCondition[], is_or: boolean }
   ): Promise<QueryResult>
   getRawClient(): Promise<any>
+  /**
+   * This method is used to do transaction operations.
+   * It means all operations will be altogether or none if any of the operation fails.
+   * Each callback has two inputs:
+   * _previousResult, the previous query result,
+   * _client, the raw client to call query(text,values) directly.
+   *
+   * The transaction will be auto committed and client be released if all operations succeed.
+   * @param _callbacks
+   */
+  transaction(_callbacks: (
+    (_previousResult: QueryResult, _client: any) => Promise<QueryResult>
+  )[]): Promise<QueryResult>
 }
 
 /**
