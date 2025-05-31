@@ -5,20 +5,20 @@ import type {
 export default class DBConnectorClass implements DBClass {
   // export default class DBConnectorClass {
   private masterDB: DBClass
-  private replicaDB: DBClass | undefined
+  private replicaDB: DBClass[] | []
   private redis: CacheClass | undefined
   private msgQueue: any
 
-  constructor(_masterDB: DBClass, _replicaDB?: DBClass, _redis?: any, _msgQueue?: any) {
+  constructor(_masterDB: DBClass, _replicaDB?: DBClass[], _redis?: any, _msgQueue?: any) {
     this.masterDB = _masterDB
-    this.replicaDB = _replicaDB || undefined
+    this.replicaDB = _replicaDB || []
     this.redis = _redis || undefined
     this.msgQueue = _msgQueue || undefined
   }
 
   async connect() {
     await Promise.all(
-      [this.masterDB, this.replicaDB, this.redis, this.msgQueue]
+      [this.masterDB, ...this.replicaDB, this.redis, this.msgQueue]
         .filter((db) => db)
         .map((db) => db.connect()),
     )
@@ -26,7 +26,7 @@ export default class DBConnectorClass implements DBClass {
 
   async disconnect() {
     await Promise.all(
-      [this.masterDB, this.replicaDB, this.redis, this.msgQueue]
+      [this.masterDB, ...this.replicaDB, this.redis, this.msgQueue]
         .filter((db) => db)
         .map((db) => db.disconnect()),
     )
@@ -34,7 +34,7 @@ export default class DBConnectorClass implements DBClass {
 
   async isconnect() {
     return Promise.all(
-      [this.masterDB, this.replicaDB, this.redis, this.msgQueue]
+      [this.masterDB, ...this.replicaDB, this.redis, this.msgQueue]
         .filter((db) => db)
         .map((db) => db.isconnect()),
     ).then((results) => results.every((result) => result))
@@ -87,10 +87,11 @@ export default class DBConnectorClass implements DBClass {
   /**
    * Run a query to the database, reading from cache if available
    * @param _query
-   * @param _isWrite, if true, always query to master db as it is a write operation,
-   * query will go to replica if this is false and replica db is available
-   * @param _getLatest, if true, always query to db (slave, master if slave is undefined)
-   * and will not create/update cache.
+   * @param _isWrite, if true, always query to master db and ignore _getLatest.
+   * @param _getLatest, if true, always query to db (replica, master if replica is undefined)
+   * and will not create/update/read cache.
+   * If both _isWrite and _getLatest are false, it will read from cache if available, db if not.
+   * It will also revalidate cache in background if needed
    * @returns result of the query
    */
   async query(_query: Query, _isWrite: boolean = false, _getLatest: boolean = false) {
@@ -98,13 +99,22 @@ export default class DBConnectorClass implements DBClass {
       return this.masterDB.query(_query, _isWrite)
     }
     // All read should be done from replica if available
-    const db = (this.replicaDB) ? this.replicaDB : this.masterDB
+    const dbQuery = async (_inquery: Query): Promise<QueryResult> => {
+      if (this.replicaDB && this.replicaDB.length > 0) {
+        try {
+          return this.replicaDB[Math.floor(Math.random() * this.replicaDB.length)].query(_inquery)
+        } catch (err) {
+          // if any of replica db failed, fallback to master db
+        }
+      }
+      return this.masterDB.query(_inquery)
+    }
     const cacheResult: QueryResult | undefined = (
-      this.redis && await this.redis.isconnect() && !_getLatest
+      !_getLatest && this.redis && await this.redis.isconnect()
     ) ? await this.redis.query(_query) : undefined
     if (_getLatest || !cacheResult || cacheResult?.ttl === undefined) {
       // if there is no cache, query to db
-      const result: QueryResult = await db.query(_query)
+      const result: QueryResult = await dbQuery(_query)
       if (!_getLatest && result) {
         if (this.redis && await this.redis.isconnect()) {
           // save result into cache in background
@@ -115,7 +125,12 @@ export default class DBConnectorClass implements DBClass {
     }
     if (this.redis && cacheResult.ttl <= (this.redis?.getConfig()?.revalidate || 0)) {
       // revalidate cache in the background
-      this.redis.buildCache(_query, await db.query(_query))
+      dbQuery(_query).then(async (result) => {
+        if (this.redis && await this.redis.isconnect()) {
+          this.redis.buildCache(_query, result)
+        }
+      })
+      // this.redis.buildCache(_query, await db.query(_query))
     }
     return cacheResult
   }

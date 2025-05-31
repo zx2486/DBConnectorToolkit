@@ -22,6 +22,8 @@ export default class PgClass implements DBClass {
       streams: [{ stream: process.stderr, level: dbConfig.logLevel as bunyan.LogLevel }],
     })
     const connectionString = `postgres://${dbConfig.username}:${dbConfig.password}@${dbConfig.endpoint}:${dbConfig.port}/${dbConfig.database}`
+    const pathname = `${dbConfig.endpoint}:${dbConfig.port}/${dbConfig.database}`
+
     this.clients = []
     const options = {
       connectionString,
@@ -31,11 +33,11 @@ export default class PgClass implements DBClass {
       allowExitOnIdle: this.dbConfig.allowExitOnIdle ?? true,
     }
     this.pool = new Pool(options)
-      .on('error', (err: any) => { this.logger.error({ event: 'PGPool - constructor - error', err }) })
-      .on('connect', () => { this.logger.info({ event: 'PGPool - constructor - connect', connectionCount: this.pool.totalCount }) })
-      .on('acquire', () => { this.logger.info({ event: 'PGPool - constructor - acquire' }) })
-      .on('release', () => { this.logger.info({ event: 'PGPool - constructor - release' }) })
-      .on('remove', () => { this.logger.info({ event: 'PGPool - constructor - remove', connectionCount: this.pool.totalCount }) })
+      .on('error', (err: any) => { this.logger.error({ event: 'PGPool - constructor - error', pathname, err }) })
+      .on('connect', () => { this.logger.info({ event: 'PGPool - constructor - connect', connectionCount: this.pool.totalCount, pathname }) })
+      .on('acquire', () => { this.logger.info({ event: 'PGPool - constructor - acquire', pathname }) })
+      .on('release', () => { this.logger.info({ event: 'PGPool - constructor - release', pathname }) })
+      .on('remove', () => { this.logger.info({ event: 'PGPool - constructor - remove', connectionCount: this.pool.totalCount, pathname }) })
     this.logger.info({ event: `Pool (${this.dbConfig.endpoint}:${this.dbConfig.port}) is ready` })
   }
 
@@ -117,7 +119,6 @@ export default class PgClass implements DBClass {
       let previousResult: QueryResult = { rows: [], count: 0, ttl: undefined }
       previousResult = await _callbacks.reduce(async (accPromise, callback) => {
         const acc = await accPromise
-        console.log('run a callback', acc)
         return callback(acc, client)
       }, Promise.resolve(previousResult))
       await client.query('COMMIT')

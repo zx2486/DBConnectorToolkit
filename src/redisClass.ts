@@ -73,7 +73,7 @@ export default class RedisClass implements CacheClass {
             useReplicas: !!(this.cacheConfig.nodeList),
           })
           : createClient({
-            url: this.cacheConfig.url, ...this.cacheConfig.options, legacyMode: false,
+            url: `redis://${this.cacheConfig.url}`, ...this.cacheConfig.options, legacyMode: false,
           })
         const logList = ['reconnecting', 'end', 'ready', 'connect']
         logList.forEach((event) => {
@@ -138,8 +138,12 @@ export default class RedisClass implements CacheClass {
     if (!this.cacheClient) await this.connect()
     const hashKey = `${this.cacheConfig.cacheHeader}${RedisClass.hashkeyOf(_query)}`
     const result = await this.cacheClient.get(hashKey)
+    if (!result) {
+      return undefined
+    }
+    const parsedResult = JSON.parse(result)
     const ttl = await this.cacheClient.ttl(hashKey)
-    return { ...result, ttl }
+    return { ...parsedResult, ttl }
   }
 
   static hashkeyOf(_query: Query) {
@@ -154,14 +158,15 @@ export default class RedisClass implements CacheClass {
     const hashKey = `${this.cacheConfig.cacheHeader}${RedisClass.hashkeyOf(_query)}`
     // get a lock to make sure only one process is writing to the cache
     const lockKey = `${hashKey}:lock`
-    const lockTTL = 10000 // 10s
+    const lockTTL = 10 // 10s
     const lock = await this.cacheClient.set(lockKey, '1', {
       EX: lockTTL,
       NX: true,
     })
     if (lock === 'OK') {
-      this.logger.info({ event: 'Redis cache set', hashKey })
-      await this.cacheClient.set(hashKey, _result, customTTL || this.cacheConfig.cacheTTL)
+      await this.cacheClient.set(hashKey, JSON.stringify(_result), {
+        EX: customTTL || this.cacheConfig.cacheTTL,
+      })
       await this.cacheClient.del(lockKey)
     }
   }

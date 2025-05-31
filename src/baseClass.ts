@@ -156,8 +156,8 @@ export interface DBClass {
 
 /**
  * Basic CacheConfig class, it defines the structure of a cache config.
- * client: string, it defines the type of database client, e.g. 'redis', 'nodecache'
- * Actual implementation depends on the database type.
+ * client: string, it defines the type of cache client, e.g. 'redis', 'nodecache'
+ * Actual implementation depends on the cache type. Times are in seconds
  */
 export type CacheConfig = {
   client: string,
