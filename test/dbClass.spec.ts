@@ -336,7 +336,7 @@ describe('PgClass', () => {
         await pgClass.query({ text: 'SELECT * FROM users', values: [] })
       }, (err: Error) => {
         assert.strictEqual(err.name, 'Error')
-        assert.strictEqual(err.message, 'Invalid SQL query')
+        assert.strictEqual(err.message, 'Connection failed')
         return true
       })
       assert(poolStub.connect.calledOnce)
@@ -368,7 +368,7 @@ describe('PgClass', () => {
         if (text === 'EXPLAIN SELECT * FROM users') {
           return
         }
-        throw new Error('Invalid query')
+        throw new Error('Invalid SQL query')
       })
     })
 

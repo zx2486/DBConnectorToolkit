@@ -116,7 +116,7 @@ describe('redisClass', () => {
             on: sinon.stub(),
           }
         }),
-        get: sinon.stub().resolves({ rows: [{ id: 'key1' }], count: 1 }),
+        get: sinon.stub().resolves(JSON.stringify({ rows: [{ id: 'key1' }], count: 1 })),
         set: sinon.stub().resolves(),
         select: sinon.stub().resolves(),
         ttl: sinon.stub().resolves(3600),
