@@ -157,7 +157,10 @@ export interface DBClass {
 /**
  * Basic CacheConfig class, it defines the structure of a cache config.
  * client: string, it defines the type of cache client, e.g. 'redis', 'nodecache'
- * Actual implementation depends on the cache type. Times are in seconds
+ * Actual implementation depends on the cache type. Times are in seconds.
+ * reconnectOnError only works with ioredis, it will determine whether to reconnect on error.
+ * pingInterval is the interval to ping the cache server to keep the connection alive.
+ * pingInterval, slotsRefreshTimeout, slotsRefreshInterval only works with redis, not ioredis.
  */
 export type CacheConfig = {
   client: string,
@@ -173,8 +176,9 @@ export type CacheConfig = {
   connectTimeout?: number,
   keepAlive?: number,
   reconnectStrategy?: (_retries: number) => number,
+  reconnectOnError?: (_err: any) => boolean,
   disableOfflineQueue?: boolean,
-  tls?: boolean,
+  tls?: boolean | object,
   checkServerIdentity?: any,
   cluster?: boolean,
   logLevel?: string,

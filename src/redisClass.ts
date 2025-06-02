@@ -52,7 +52,7 @@ export default class RedisClass implements CacheClass {
     if (_config.username && _config.password) {
       this.cacheConfig.options.username = _config.username
       this.cacheConfig.options.password = _config.password
-      this.cacheConfig.options.socket.tls = _config.tls || true
+      this.cacheConfig.options.socket.tls = !!_config.tls
       // skip certificate hostname validation
       if (_config.checkServerIdentity) {
         this.cacheConfig.options.socket.checkServerIdentity = _config.checkServerIdentity
