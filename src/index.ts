@@ -1,9 +1,24 @@
-import type { DBConfig, CacheConfig, DBClass } from './baseClass'
+import type {
+  DBConfig, CacheConfig, DBClass, CacheClass,
+} from './baseClass'
 import PgClass from './dbClass'
 
 import RedisClass from './redisClass'
-
+import IORedisClass from './ioredisClass'
 import DBConnectorClass from './dbConnectorClass'
+
+const getCacheObj = (_cacheConfig?: CacheConfig): CacheClass | undefined => {
+  const supportClasss = new Map<string, typeof RedisClass | typeof IORedisClass>([
+    ['redis', RedisClass],
+    ['ioredis', IORedisClass],
+  ])
+  if (!_cacheConfig || !_cacheConfig.client
+    || !supportClasss.has(_cacheConfig.client)) {
+    return undefined
+  }
+  const CacheClassConstructor = supportClasss.get(_cacheConfig.client)
+  return (CacheClassConstructor) ? new CacheClassConstructor(_cacheConfig) : undefined
+}
 
 /**
  * Main entry point for database connection.
@@ -30,9 +45,9 @@ const dbConnector = (
   const masterDB = new PgClass(masterConfig)
   const replicaDB = (replicaConfig && replicaConfig.length > 0)
     ? replicaConfig.filter(({ client }) => client === 'pg').map((config) => new PgClass(config)) : []
-  const redis = (cacheConfig && cacheConfig.client === 'redis')
-    ? new RedisClass(cacheConfig) : undefined
+  const redis = getCacheObj(cacheConfig)
 
   return new DBConnectorClass(masterDB, replicaDB, redis)
 }
+
 export default dbConnector
