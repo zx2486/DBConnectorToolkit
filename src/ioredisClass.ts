@@ -21,7 +21,7 @@ export default class IORedisClass implements CacheClass {
     this.cacheConfig = {
       host: (_config.url.replace('redis://', '').match(/^[^:]+/) || [])[0],
       port: (_config.url.replace('redis://', '').match(/:(\d+)/) || [])[0],
-      path: _config.url.replace('redis://', ''),
+      url: _config.url.replace('redis://', ''),
       options: {
         maxRetriesPerRequest: null,
         keepAlive: (_config.keepAlive) ? _config.keepAlive * 1000 : 0,
