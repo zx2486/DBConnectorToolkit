@@ -19,8 +19,8 @@ export default class IORedisClass implements CacheClass {
       streams: [{ stream: process.stderr, level: _config.logLevel as bunyan.LogLevel }],
     })
     this.cacheConfig = {
-      host: (_config.url.replace('redis://', '').match(/^[^:]+/) || [])[0],
-      port: (_config.url.replace('redis://', '').match(/:(\d+)/) || [])[0],
+      host: (_config.url.replace('redis://', '').match(/^[^:]+/) || ['localhost'])[0],
+      port: (_config.url.replace('redis://', '').match(/:(\d+)/) || [':6379', '6379'])[1],
       url: _config.url.replace('redis://', ''),
       options: {
         maxRetriesPerRequest: null,
@@ -83,8 +83,8 @@ export default class IORedisClass implements CacheClass {
               ? [
                 { port: this.cacheConfig.port, host: this.cacheConfig.host },
                 ...this.cacheConfig.nodeList.map((url: string) => ({
-                  host: (url.replace('redis://', '').match(/^[^:]+/) || [])[0],
-                  port: (url.replace('redis://', '').match(/:(\d+)/) || [])[0],
+                  host: (url.replace('redis://', '').match(/^[^:]+/) || ['localhost'])[0],
+                  port: (url.replace('redis://', '').match(/:(\d+)/) || [':6379', '6379'])[1],
                 })),
               ] : [{ port: this.cacheConfig.port, host: this.cacheConfig.host }],
             { ...this.cacheConfig.options },
