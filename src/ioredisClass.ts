@@ -191,9 +191,9 @@ export default class IORedisClass implements CacheClass {
 
   async clearAllCache() {
     if (!this.cacheClient) await this.connect()
-    // Send `FLUSHDB` command to all slaves:
+    // Send `FLUSHDB` command to all masters in the cluster:
     if (this.cacheConfig.is_cluster && this.cacheClient?.nodes) {
-      const nodes = this.cacheClient.nodes('all')
+      const nodes = this.cacheClient.nodes('master')
       await Promise.all(nodes.map((node: any) => node.flushdb()))
     } else await this.cacheClient.flushdb()
   }
