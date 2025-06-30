@@ -104,6 +104,7 @@ export interface DBClass {
   connect(): Promise<void>
   disconnect(): Promise<void>
   isconnect(): Promise<boolean>
+  getConfig(): DBConfig
   query(_query: Query, _isWrite?: boolean, _getLatest?: boolean): Promise<QueryResult>
   buildSelectQuery(
     _table: TableWithJoin[],
@@ -207,6 +208,7 @@ export interface CacheClass {
 /**
  * Basic QueueConfig class, it defines the structure of a queue db connection config.
  * client: string, it defines the type of queue client, e.g. 'kafka'
+ * dbtopic: string, it defines the topic to send when write queries reach the dbConnectorClass
  */
 export interface QueueConfig {
   client: string,
@@ -238,6 +240,7 @@ export interface QueueConfig {
   msgTimeout?: number,
   compression?: string, // default is none, only gzip is supported without other pacakages
   logLevel?: string,
+  dbtopic?: string,
 }
 
 /**
@@ -260,6 +263,7 @@ export interface QueueClass {
   disconnect(_isProducer: boolean): Promise<void>
   isconnect(_isProducer: boolean): boolean
   getConfig(): any
+  getDBTopic(): string | undefined
   send(_msg: QueueMessage[]): Promise<UUID | null>
   sendCount(): number
   subscribe(

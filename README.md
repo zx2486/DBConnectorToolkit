@@ -11,7 +11,7 @@ npm install dbconnectortoolkit
 ## Sample use case
 Suppose you have a postgres database (web) and would like to select data from it.
 ```typescript
-import { DBConnectorClass } from 'dbconnectortoolkit'
+const dbConnector = require('../../../DBConnectorToolkit/dist').default;
 
 const masterDBConfig = {
   client: 'pg',
@@ -21,7 +21,7 @@ const masterDBConfig = {
   password: 'your_password',
   database: 'web',
 }
-const dbConnector = new DBConnectorClass(masterDBConfig)
+const dbConnector = dbConnector(masterDBConfig)
 try {
     await dbConnector.connect()
     // Select all data from the users table
@@ -51,27 +51,47 @@ Done.
 
 Now your application is getting great, your lead asks you to use replica database for read queries. Instead of rewriting lots of SQL query code to use slave DB client, all you need is
 ```typescript
-const slaveDBConfig = {
+const replicaDBConfig = [
+    {
     ...
-}
-const dbConnector = new DBConnectorClass(masterDBConfig, slaveDBConfig)
+    },...
+]
+db = dbConnector(masterDBConfig, replicaDBConfig);
 ```
 All select queries will go to replica and write queries will go to master. No other code change is needed.
 
 Now the traffic is even higher, redis is introduced as cache layer. How many code changes?
 ```typescript
 const cacheConfig = {
-    client: 'redis',
+    client: 'ioredis',
     url: 'localhost@6379',
     dbIndex: 1, // database index, default is 0
     cacheHeader: 'dbCache'
 }
-const dbConnector = new DBConnectorClass(masterDBConfig, slaveDBConfig, cacheConfig)
+db = dbConnector(masterDBConfig, replicaDBConfig, cacheConfig);
 ```
 Done, no other code change is needed. All read query results will be cached in redis.
 The key in redis will be dbCache:${sha256 hash of the raw query}
 
-If data should come from database instead of cache, set _getLatest to false.
+If data should come from database instead of cache, set _getLatest to true.
+
+When one day the traffic is so high that the backend server is broken into two layers: 
+1) Multiple API servers which cannot touch master database
+2) Some cron jobs or processing nodes or matching engines which creates db writes
+3) All db write requests will be sent as messages for a centralized node to handle and write to master database (and updating cache if needed)
+
+You can still reuse the whole server code as API server with only one change:
+```typescript
+const kafkaConfig = {
+  client: 'kafka',
+  appName: 'web-two-layer',
+  brokerList: ['localhost:9092'],
+  dbTopic: 'writing_db_topic',
+}
+// There is no master here
+db = dbConnector(replicaDBConfig[0], replicaDBConfig, redisConfig, kafkaConfig);
+```
+All db write requests will be sent to kafka under topic 'writing_db_topic'. All db reads will still be handled by cache / read replica
 
 ## Running queries
 For details, please read the documentations.
@@ -117,16 +137,16 @@ values: [true, 'system', 10, 2]
 await select(
     [{ table: 'users', name: 'u' }, 
         {
-        table: 'user_profiles',
-        name: 'up',
-        join_type: 'INNER',
-        on: [{ left: 'u.id', right: 'up.user_id' }, { left: 'up.is_deleted', right: 'false' }],
+            table: 'user_profiles',
+            name: 'up',
+            join_type: 'INNER',
+            on: [{ left: 'u.id', right: 'up.user_id' }, { left: 'up.is_deleted', right: 'false' }],
         }, 
         {
-        table: 'user_entity_relationship',
-        name: 'uer',
-        join_type: 'LEFT',
-        on: [{ left: 'u.id', right: 'uer.user_id' }, { left: 'uer.is_deleted', right: 'true' }],
+            table: 'user_entity_relationship',
+            name: 'uer',
+            join_type: 'LEFT',
+            on: [{ left: 'u.id', right: 'uer.user_id' }, { left: 'uer.is_deleted', right: 'true' }],
         }
     ],
     ['u.id', 'u.name', 'up.profile_picture', 'uer.entity'],
@@ -141,7 +161,7 @@ await select(
 
 insert(_table: string, _data: Object): Promise<QueryResult>
 // example 'INSERT INTO users (name, age) VALUES ($1, $2) RETURNING *', values:['test',30]
-await insert('users', { name: 'test', age: 30 }) 
+await insert('users', { name: 'test', age: 30 })
 
 update(_table: string, _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean }
@@ -149,8 +169,8 @@ update(_table: string, _data: Object,
 // example 'UPDATE users SET name = $1, age = $2 WHERE id <= $3 AND active != $4 RETURNING *', values:['test', 30, 1, true]
 await update('users', {name:'test', age: 30}
     { array: [
-        { field: 'id', comparator: '<=', value: 1 }, 
-        { field: 'active', comparator: '!=', value: true }
+        ['id', '<=', 1 ],
+        ['active', '!=', true ]
     ], is_or: false }
 )
 
@@ -165,14 +185,14 @@ delete(_table: string,
 ): Promise<QueryResult>
 // example: 'DELETE FROM users WHERE id <= $1 AND active != $2 RETURNING *', values: [1, true]
 await delete('users',
-    { array: [{ field: 'id', comparator: '<=', value: 1 }, { field: 'active', comparator: '!=', value: true }], is_or: false },
+    { array: [ ['id', '<=', 1 ], ['active', '!=', true ] ], is_or: false },
 )
 ```
 
 ## TODO
-Currently this only support postgresSQL connection using node-postgres, redis connection using redis.
-Support of message queue, using kafka by kafkajs
-Support of other databases / noSQL database for caching, and RabbitMQ as message queue.
+Unit test cases
+Currently this only support postgresSQL connection using node-postgres, redis connection using ioredis, kafka queue using kafkajs.
+Support of other databases / noSQL database, nodecache for caching, and RabbitMQ as message queue.
 
 ## Motivations
 When we learn programming and read / write data to SQL database, we use libraries like node-postgres and interacts with master database directly.

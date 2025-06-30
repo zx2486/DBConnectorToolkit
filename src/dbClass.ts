@@ -41,6 +41,10 @@ export default class PgClass implements DBClass {
     this.logger.info({ event: `Pool (${this.dbConfig.endpoint}:${this.dbConfig.port}) is ready` })
   }
 
+  getConfig(): DBConfig {
+    return this.dbConfig
+  }
+
   async connect() {
     try {
       const clientId: string = uuidv4()

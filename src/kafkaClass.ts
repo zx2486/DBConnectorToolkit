@@ -122,6 +122,10 @@ export default class KafkaClass implements QueueClass {
     return this.config
   }
 
+  getDBTopic(): string | undefined {
+    return this.config?.dbtopic || undefined
+  }
+
   sendCount(): number {
     return this.produceCount
   }
@@ -169,6 +173,8 @@ export default class KafkaClass implements QueueClass {
         })),
       })
       this.produceCount += _message.length
+      // return something random to indicate success
+      return crypto.randomUUID()
     } catch (err) {
       this.logger.error({
         event: 'Producer - produce err',

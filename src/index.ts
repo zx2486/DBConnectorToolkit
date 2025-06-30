@@ -1,11 +1,12 @@
 import type {
-  DBConfig, CacheConfig, DBClass, CacheClass,
+  DBConfig, CacheConfig, DBClass, CacheClass, QueueConfig,
 } from './baseClass'
 import PgClass from './dbClass'
 
 import RedisClass from './redisClass'
 import IORedisClass from './ioredisClass'
 import DBConnectorClass from './dbConnectorClass'
+import KafkaClass from './kafkaClass'
 
 const getCacheObj = (_cacheConfig?: CacheConfig): CacheClass | undefined => {
   const supportClasss = new Map<string, typeof RedisClass | typeof IORedisClass>([
@@ -37,7 +38,7 @@ const dbConnector = (
   masterConfig: DBConfig,
   replicaConfig?: DBConfig[],
   cacheConfig?: CacheConfig,
-  // msgQueueConfig?: MsgQueueConfig,
+  msgQueueConfig?: QueueConfig,
 ): DBClass => {
   if (!masterConfig || masterConfig.client !== 'pg') {
     throw new Error('Master DB config is required and must be a PostgreSQL config')
@@ -46,8 +47,8 @@ const dbConnector = (
   const replicaDB = (replicaConfig && replicaConfig.length > 0)
     ? replicaConfig.filter(({ client }) => client === 'pg').map((config) => new PgClass(config)) : []
   const redis = getCacheObj(cacheConfig)
-
-  return new DBConnectorClass(masterDB, replicaDB, redis)
+  const msgQueue = (msgQueueConfig && msgQueueConfig.client === 'kafka') ? new KafkaClass(msgQueueConfig) : undefined
+  return new DBConnectorClass(masterDB, replicaDB, redis, msgQueue)
 }
 
 export default dbConnector

@@ -1,5 +1,6 @@
+import bunyan from 'bunyan'
 import type {
-  Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, CacheClass,
+  Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, CacheClass, QueueClass,
 } from './baseClass'
 
 export default class DBConnectorClass implements DBClass {
@@ -7,37 +8,66 @@ export default class DBConnectorClass implements DBClass {
   private masterDB: DBClass
   private replicaDB: DBClass[] | []
   private redis: CacheClass | undefined
-  private msgQueue: any
+  private msgQueue: QueueClass | undefined
+  private logger: bunyan
 
-  constructor(_masterDB: DBClass, _replicaDB?: DBClass[], _redis?: any, _msgQueue?: any) {
+  constructor(
+    _masterDB: DBClass,
+    _replicaDB?: DBClass[],
+    _redis?: CacheClass,
+    _msgQueue?: QueueClass,
+  ) {
     this.masterDB = _masterDB
     this.replicaDB = _replicaDB || []
     this.redis = _redis || undefined
     this.msgQueue = _msgQueue || undefined
+    this.logger = bunyan.createLogger({
+      name: 'DBConnectorClass',
+      streams: [{
+        stream: process.stderr,
+        level: _masterDB.getConfig()?.logLevel as bunyan.LogLevel,
+      }],
+    })
   }
 
   async connect() {
     await Promise.all(
-      [this.masterDB, ...this.replicaDB, this.redis, this.msgQueue]
+      [this.masterDB, ...this.replicaDB, this.redis]
         .filter((db) => db)
-        .map((db) => db.connect()),
+        .map((db) => db?.connect()),
     )
+    if (this.msgQueue) {
+      await this.msgQueue.connect(true)
+    }
   }
 
   async disconnect() {
     await Promise.all(
-      [this.masterDB, ...this.replicaDB, this.redis, this.msgQueue]
+      [this.masterDB, ...this.replicaDB, this.redis]
         .filter((db) => db)
-        .map((db) => db.disconnect()),
+        .map((db) => db?.disconnect()),
     )
+    if (this.msgQueue) {
+      await this.msgQueue.disconnect(true)
+    }
   }
 
   async isconnect() {
     return Promise.all(
-      [this.masterDB, ...this.replicaDB, this.redis, this.msgQueue]
+      [this.masterDB, ...this.replicaDB, this.redis]
         .filter((db) => db)
-        .map((db) => db.isconnect()),
+        .map((db) => db?.isconnect()),
     ).then((results) => results.every((result) => result))
+      .then((result) => {
+        if (this.msgQueue) {
+          return result && this.msgQueue.isconnect(true)
+        }
+        return result
+      })
+  }
+
+  getConfig() {
+    return this.masterDB.getConfig()
   }
 
   async getRawClient() {
@@ -47,6 +77,10 @@ export default class DBConnectorClass implements DBClass {
   async transaction(_callbacks: (
     (_previousResult: QueryResult, _client: any) => Promise<QueryResult>
   )[]): Promise<QueryResult> {
+    if (this.msgQueue && this.msgQueue.isconnect(true)) {
+      // TODO: how to support transaction with message queue?
+      throw new Error('Cannot do transaction while message queue is connected')
+    }
     return this.masterDB.transaction(_callbacks)
   }
 
@@ -96,6 +130,28 @@ export default class DBConnectorClass implements DBClass {
    */
   async query(_query: Query, _isWrite: boolean = false, _getLatest: boolean = false) {
     if (_isWrite) {
+      if (this.msgQueue && this.msgQueue.isconnect(true)) {
+        const dbTopic = this.msgQueue.getDBTopic()
+        if (dbTopic) {
+          // if message queue is connected, send query to message queue
+          const result = await this.msgQueue.send([{
+            topic: dbTopic,
+            message: JSON.stringify(_query),
+            key: crypto.randomUUID(),
+          }]).catch((err) => {
+            this.logger?.error('Error sending query to message queue:', err)
+            return null
+          })
+          if (result) {
+            // return the UUID of the message sent
+            return {
+              rows: [{ uuid: result }],
+              count: 1,
+              ttl: undefined,
+            }
+          }
+        }
+      }
       return this.masterDB.query(_query, _isWrite)
     }
     // All read should be done from replica if available
@@ -149,7 +205,9 @@ export default class DBConnectorClass implements DBClass {
   }
 
   async insert(_table: string, _data: Object) {
-    return this.masterDB.insert(_table, _data)
+    // return this.masterDB.insert(_table, _data)
+    const query = this.buildInsertQuery(_table, _data)
+    return this.query(query, true)
   }
 
   async update(
@@ -157,18 +215,24 @@ export default class DBConnectorClass implements DBClass {
     _data: Object,
     _conditions?: { array: QueryCondition[], is_or: boolean },
   ) {
-    return this.masterDB.update(_table, _data, _conditions)
+    // return this.masterDB.update(_table, _data, _conditions)
+    const query = this.buildUpdateQuery(_table, _data, _conditions)
+    return this.query(query, true)
   }
 
   async upsert(_table: string, _indexData: string[], _data: Object) {
-    return this.masterDB.upsert(_table, _indexData, _data)
+    // return this.masterDB.upsert(_table, _indexData, _data)
+    const query = this.buildUpsertQuery(_table, _indexData, _data)
+    return this.query(query, true)
   }
 
   async delete(
     _table: string,
     _conditions?: { array: QueryCondition[], is_or: boolean },
   ) {
-    return this.masterDB.delete(_table, _conditions)
+    // return this.masterDB.delete(_table, _conditions)
+    const query = this.buildDeleteQuery(_table, _conditions)
+    return this.query(query, true)
   }
 
   async buildCache(_query: Query): Promise<void> {
