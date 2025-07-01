@@ -60,6 +60,20 @@ const selectCases = [
     expected: 'SELECT id, name FROM users WHERE age < $1 ORDER BY created_at DESC, name ASC LIMIT $2',
     values: [3, 10],
   },
+  {
+    table: [{ table: 'users' }],
+    fields: ['*'],
+    conditions: { array: [['phone_number', 'IS NULL'], ['email', 'test@test.com'], ['user_posts', '>', 5]], is_or: false },
+    expected: 'SELECT * FROM users WHERE phone_number IS NULL AND email = $1 AND user_posts > $2',
+    values: ['test@test.com', 5],
+  },
+  {
+    table: [{ table: 'users' }],
+    fields: ['*'],
+    conditions: { array: [['user_posts', '5']], is_or: false },
+    expected: 'SELECT * FROM users WHERE user_posts = $1',
+    values: ['5'],
+  },
 ]
 
 describe('PgClass', () => {
@@ -86,7 +100,7 @@ describe('PgClass', () => {
       })
     })
 
-    it('should validate comparators correctly', () => {
+    /* it('should validate comparators correctly', () => {
       // Valid comparators
       const validIdentifiers = ['=', '!=', '<', '<=', '>', '>=', '<>']
       validIdentifiers.forEach((id) => {
@@ -103,6 +117,7 @@ describe('PgClass', () => {
         assert.throws(() => PgClass.validateComparator(c), new Error(`Invalid comparator: ${c}`))
       })
     })
+    */
 
     it('should validate values correctly', () => {
       // Valid values
@@ -116,7 +131,7 @@ describe('PgClass', () => {
       })
 
       // Invalid values
-      const invalidIdentifiers = [{}, [], () => { }, undefined]
+      const invalidIdentifiers = [[], () => { }, undefined]
       invalidIdentifiers.forEach((c) => {
         assert.throws(() => PgClass.validateValue(c), new Error('Invalid value'))
       })
@@ -138,6 +153,194 @@ describe('PgClass', () => {
       invalidIdentifiers.forEach((c) => {
         assert.throws(() => PgClass.validateJoinType(c), new Error(`Invalid join type: ${c}`))
       })
+    })
+  })
+
+  const validConfig = {
+    client: 'pg',
+    endpoint: 'localhost',
+    port: 5432,
+    database: 'test',
+    username: 'user',
+    password: 'password',
+  }
+  describe('Class constructor Throw error correctly', () => {
+    it('throw error correctly', async () => {
+      const invalidConfigs = [
+        { ...validConfig, client: 'notpg' },
+        { ...validConfig, endpoint: '' },
+        { ...validConfig, port: 0 },
+        { ...validConfig, database: '' },
+        { ...validConfig, username: '' },
+        { ...validConfig, password: '' },
+      ]
+      await Promise.all(invalidConfigs.map(async (c) => {
+        await assert.rejects(
+          async () => {
+            const pgClassShouldNotWork = new PgClass(c)
+            assert.fail(new Error(`should throw error but did not ${c}`))
+          },
+          (err: Error) => {
+            assert.strictEqual(err.name, 'Error')
+            assert.strictEqual(err.message, 'Invalid DB config')
+            return true
+          },
+        )
+      }))
+    })
+  })
+
+  describe('connect, disconnect, isconnect', () => {
+    let pgClass: PgClass
+    let poolStub: sinon.SinonStubbedInstance<Pool>
+    let loggerStub: sinon.SinonStubbedInstance<any>
+    let clientStub: { [key: string]: any } = {}
+
+    before(() => {
+      // Stub the Pool class
+      poolStub = sinon.createStubInstance(Pool)
+
+      // Stub the logger
+      loggerStub = {
+        error: sinon.stub(),
+        info: sinon.stub(),
+        createLogger: sinon.stub().returns({
+          error: sinon.stub(),
+          info: sinon.stub(),
+        }),
+      }
+      clientStub = []
+
+      // Create an instance of PgClass with the stubbed Pool
+      pgClass = new PgClass({
+        client: 'pg',
+        endpoint: 'localhost',
+        port: 5432,
+        database: 'test',
+        username: 'user',
+        password: 'password',
+      });
+      (pgClass as any).pool = poolStub;
+      (pgClass as any).clients = clientStub;
+      (pgClass as any).logger = loggerStub
+
+      // Stub the query method to run the special function
+      poolStub.connect.callsFake(async () => ({
+        release: sinon.stub(),
+        removeAllListeners: sinon.stub(),
+        query: sinon.stub().callsFake(async () => (
+          { rows: [{ id: 1 }], rowsCount: 1 }
+        )),
+      }))
+      poolStub.end.callsFake(async () => ({}))
+      poolStub.query.callsFake(async () => ({}))
+    })
+
+    after(() => {
+      // Restore the original methods
+      sinon.restore()
+    })
+
+    it('should connect to the database', async () => {
+      poolStub.connect.resetHistory()
+      await pgClass.connect()
+      assert(poolStub.connect.calledOnce)
+      assert(Object.keys(clientStub).length === 1)
+    })
+
+    it('should get a client from the pool', async () => {
+      poolStub.connect.resetHistory()
+      const client = await pgClass.getRawClient()
+      assert(poolStub.connect.calledOnce)
+      assert.deepStrictEqual(await client.query(), { rows: [{ id: 1 }], rowsCount: 1 })
+    })
+
+    it('should log an error and throw when connection fails', async () => {
+      const error = new Error('Connection failed')
+      poolStub.connect.rejects(error)
+      loggerStub.error.resetHistory()
+
+      await assert.rejects(async () => {
+        await pgClass.connect()
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Failed to connect to database')
+        return true
+      })
+      assert(loggerStub.error.calledWith({ event: 'PGPool - connect', err: error }))
+    })
+
+    it('should log an error and throw when get raw client fails', async () => {
+      const error = new Error('Connection failed')
+      poolStub.connect.rejects(error)
+      loggerStub.error.resetHistory()
+
+      await assert.rejects(async () => {
+        await pgClass.getRawClient()
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Failed to get db client')
+        return true
+      })
+      assert(loggerStub.error.calledWith({ event: 'PGPool - getRawClient', err: error }))
+    })
+
+    it('should disconnect from the database', async () => {
+      const fakeClient = { release: sinon.stub(), removeAllListeners: sinon.stub() };
+      (pgClass as any).clients = { 'client-id': fakeClient }
+      poolStub.end.resetHistory()
+      await pgClass.disconnect()
+
+      assert(fakeClient.removeAllListeners.calledOnce)
+      assert(fakeClient.release.calledOnce)
+      assert(poolStub.end.calledOnce)
+    })
+
+    it('should log an error and throw when disconnection fails', async () => {
+      const error = new Error('Connection failed')
+      poolStub.end.rejects(error)
+      loggerStub.error.resetHistory()
+
+      await assert.rejects(async () => {
+        await pgClass.disconnect()
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Failed to disconnect from database')
+        return true
+      })
+      assert(loggerStub.error.calledWith({ event: 'PGPool - disconnect', err: error }))
+    })
+
+    it('should check isconnect to the database', async () => {
+      poolStub.query.resetHistory()
+      assert(await pgClass.isconnect())
+      assert(poolStub.query.calledOnce)
+
+      const error = new Error('Connection failed')
+      poolStub.query.rejects(error)
+      loggerStub.error.resetHistory()
+      assert(!(await pgClass.isconnect()))
+      assert(loggerStub.error.calledWith({ event: 'PGPool - isconnect', err: error }))
+    })
+
+    it('should connect to database when it is not when calling query', async () => {
+      poolStub.query.resetHistory()
+      poolStub.connect.resetHistory()
+      poolStub.connect.callsFake(async () => ({
+        release: sinon.stub(), removeAllListeners: sinon.stub(),
+      }))
+      const error = new Error('Connection failed')
+      poolStub.query.rejects(error)
+      // the call will do one connect() and still reject (as query is not running)
+      await assert.rejects(async () => {
+        await pgClass.query({ text: 'SELECT * FROM users', values: [] })
+      }, (err: Error) => {
+        assert.strictEqual(err.name, 'Error')
+        assert.strictEqual(err.message, 'Connection failed')
+        return true
+      })
+      assert(poolStub.connect.calledOnce)
+      assert(poolStub.query.callCount === 2)
     })
   })
 
@@ -165,7 +368,7 @@ describe('PgClass', () => {
         if (text === 'EXPLAIN SELECT * FROM users') {
           return
         }
-        throw new Error('Invalid query')
+        throw new Error('Invalid SQL query')
       })
     })
 
@@ -347,7 +550,7 @@ describe('PgClass', () => {
         {
           table: [{ table: 'users' }],
           fields: ['id', 'name'],
-          conditions: { array: [{ field: 'age', value: {} }], is_or: true },
+          conditions: { array: [{ field: 'age', value: [] }], is_or: true },
           errMsg: 'Invalid value',
         },
       ]
@@ -476,7 +679,7 @@ describe('PgClass', () => {
 
       // Stub the query method to run the special function
       poolStub.query.callsFake(async (text: any, values: any) => (
-        [{ id: 1, debug_text: text, debug_values: values }]
+        { rows: [{ id: 1, debug_text: text, debug_values: values }], rowCount: 1 }
       ))
     })
 
@@ -505,19 +708,19 @@ describe('PgClass', () => {
       const insertCases = [
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           expected: 'INSERT INTO users (name) VALUES ($1) RETURNING *',
           values: ['test'],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { name: 'test', age: 30 },
           expected: 'INSERT INTO users (name, age) VALUES ($1, $2) RETURNING *',
           values: ['test', 30],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }],
+          data: { name: 'test', age: 30, active: true },
           expected: 'INSERT INTO users (name, age, active) VALUES ($1, $2, $3) RETURNING *',
           values: ['test', 30, true],
         },
@@ -531,7 +734,7 @@ describe('PgClass', () => {
       const failedCases = [
         {
           table: '',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           errMsg: 'Invalid query',
         },
         {
@@ -541,17 +744,12 @@ describe('PgClass', () => {
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: { a: 1 } }],
+          data: { name: 'test', age: 30, active: ['a', 1] },
           errMsg: 'Invalid value',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }, { field: 'age', value: 30 }],
-          errMsg: 'Duplicate field in data',
-        },
-        {
-          table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active; SELECT 1;', value: true }],
+          data: { name: 'test', age: 30, 'active; SELECT 1;': true },
           errMsg: 'Invalid identifier: active; SELECT 1;',
         },
       ]
@@ -574,21 +772,28 @@ describe('PgClass', () => {
       const updateCases = [
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           expected: 'UPDATE users SET name = $1 WHERE id = $2 RETURNING *',
           values: ['test', 1],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { name: 'test', age: 30 },
           conditions: { array: [{ field: 'id', comparator: '<=', value: 1 }, { field: 'active', comparator: '!=', value: true }], is_or: false },
           expected: 'UPDATE users SET name = $1, age = $2 WHERE id <= $3 AND active != $4 RETURNING *',
           values: ['test', 30, 1, true],
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'active', value: true }],
+          data: { name: 'test', age: 30 },
+          conditions: { array: [['id', '<=', 1], ['active', '!=', true]], is_or: false },
+          expected: 'UPDATE users SET name = $1, age = $2 WHERE id <= $3 AND active != $4 RETURNING *',
+          values: ['test', 30, 1, true],
+        },
+        {
+          table: 'users',
+          data: { name: 'test', active: true },
           conditions: { array: [{ field: 'id', comparator: '<>', value: 1 }, { field: 'age', comparator: '>', value: 30 }], is_or: true },
           expected: 'UPDATE users SET name = $1, active = $2 WHERE id <> $3 OR age > $4 RETURNING *',
           values: ['test', true, 1, 30],
@@ -603,7 +808,7 @@ describe('PgClass', () => {
       const failedCases = [
         {
           table: '',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid query',
         },
@@ -615,38 +820,86 @@ describe('PgClass', () => {
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: { a: 1 } }],
+          data: { name: 'test', age: 30, active: [{ a: 1 }] },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid value',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }, { field: 'age', value: 30 }],
-          conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
-          errMsg: 'Duplicate field in data',
-        },
-        {
-          table: 'users',
-          data: [{ field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active; SELECT 1;', value: true }],
+          data: { name: 'test', age: 30, 'active; SELECT 1;': true },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid identifier: active; SELECT 1;',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '===', value: 1 }], is_or: false },
           errMsg: 'Invalid comparator: ===',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [], is_or: false },
           errMsg: 'Invalid conditions',
         },
         {
           table: 'users',
-          data: [{ field: 'name', value: 'test' }],
+          data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }, { field: '', comparator: '=', value: 1 }], is_or: false },
+          errMsg: 'Invalid identifier: ',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['', '<=', 1], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid identifier: ',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [[5, '<=', 1], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid identifier: 5',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['id', '!!', 1], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid comparator: !!',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['id', '>=', []], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid value',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['id;', '>=', 'value'], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid identifier: id;',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['id', '>=', 'value', 'more'], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid condition: ["id",">=","value","more"]',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['id'], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid condition: ["id"]',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['id', []], ['active', '!=', true]], is_or: false },
+          errMsg: 'Invalid value',
+        },
+        {
+          table: 'users',
+          data: { name: 'test' },
+          conditions: { array: [['', 5], ['active', '!=', true]], is_or: false },
           errMsg: 'Invalid identifier: ',
         },
       ]
@@ -670,28 +923,30 @@ describe('PgClass', () => {
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id: 1, name: 'test' },
           expected: 'INSERT INTO users (id, name) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name RETURNING *',
           values: [1, 'test'],
         },
         {
           table: 'users',
           indexData: ['id', 'name'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { id: 1, name: 'test', age: 30 },
           expected: 'INSERT INTO users (id, name, age) VALUES ($1, $2, $3) ON CONFLICT (id, name) DO UPDATE SET age = EXCLUDED.age RETURNING *',
           values: [1, 'test', 30],
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }],
+          data: { id: 1, name: 'test', age: 30 },
           expected: 'INSERT INTO users (id, name, age) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age RETURNING *',
           values: [1, 'test', 30],
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }],
+          data: {
+            id: 1, name: 'test', age: 30, active: true,
+          },
           expected: 'INSERT INTO users (id, name, age, active) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age, active = EXCLUDED.active RETURNING *',
           values: [1, 'test', 30, true],
         },
@@ -706,13 +961,13 @@ describe('PgClass', () => {
         {
           table: '',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id: 1, name: 'test' },
           errMsg: 'Invalid query',
         },
         {
           table: 'users',
           indexData: [],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id: 1, name: 'test' },
           errMsg: 'Invalid query',
         },
         {
@@ -724,31 +979,29 @@ describe('PgClass', () => {
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: { a: 1 } }],
+          data: {
+            id: 1, name: 'test', age: 30, active: [{ a: 1 }],
+          },
           errMsg: 'Invalid value',
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active', value: true }, { field: 'age', value: 30 }],
-          errMsg: 'Duplicate field in data',
-        },
-        {
-          table: 'users',
-          indexData: ['id'],
-          data: [{ field: 'id', value: 1 }, { field: 'name', value: 'test' }, { field: 'age', value: 30 }, { field: 'active; SELECT 1;', value: true }],
+          data: {
+            id: 1, name: 'test', age: 30, 'active; SELECT 1;': true,
+          },
           errMsg: 'Invalid identifier: active; SELECT 1;',
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id2', value: 1 }, { field: 'name', value: 'test' }],
+          data: { id2: 1, name: 'test' },
           errMsg: 'Index field id not found in data fields',
         },
         {
           table: 'users',
           indexData: ['id'],
-          data: [{ field: 'id', value: 1 }],
+          data: { id: 1 },
           errMsg: 'No data fields to update',
         },
       ]

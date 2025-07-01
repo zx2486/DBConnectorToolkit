@@ -26,3 +26,5 @@ node_modules/
 # internal sample testing codes
 sample_codes/
 dist/
+
+.nyc_output/

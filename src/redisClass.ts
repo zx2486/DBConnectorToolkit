@@ -1,28 +1,18 @@
 import { createClient, createCluster } from 'redis'
 import bunyan from 'bunyan'
 import { createHash } from 'crypto'
-import type { Query, QueryResult, CacheConfig } from './baseClass'
+import type {
+  Query, QueryResult, CacheConfig, CacheClass,
+} from './baseClass'
 
-export interface CacheClass {
-  connect(): Promise<void>
-  disconnect(): Promise<void>
-  isconnect(): Promise<boolean>
-  getConfig(): any
-  getPoolClient(): Promise<any>
-  query(_query: Query): Promise<QueryResult>
-  buildCache(_query: Query, _result: QueryResult): Promise<void>
-  clearCache(_query: Query): Promise<void>
-  clearAllCache(): Promise<void>
-}
-
-export class RedisClass implements CacheClass {
+export default class RedisClass implements CacheClass {
   private cacheConfig: any
   private cacheClient: any
   private logger: bunyan
 
   constructor(_config: CacheConfig) {
-    if (!_config || _config.client !== 'redis') {
-      throw new Error('Invalid DB config')
+    if (!_config || _config.client !== 'redis' || !_config.url) {
+      throw new Error('Invalid Redis config')
     }
     this.logger = bunyan.createLogger({
       name: 'RedisClass',
@@ -49,14 +39,20 @@ export class RedisClass implements CacheClass {
       is_cluster: _config.cluster || false,
       nodeList: _config.additionalNodeList && _config.additionalNodeList.length > 0
         ? [_config.url, ..._config.additionalNodeList] : false,
-      cacheHeader: `${_config.cacheHeader}:` || '',
+      cacheHeader: (_config.cacheHeader) ? `${_config.cacheHeader}:` : 'dbCache:',
       cacheTTL: _config.cacheTTL || 3600,
       revalidate: _config.revalidate || 60,
+    }
+    if (_config.cluster) {
+      this.cacheConfig.options.cluster = {
+        slotsRefreshTimeout: _config.slotsRefreshTimeout || 10000, // Default to 10 seconds
+        slotsRefreshInterval: _config.slotsRefreshInterval || 30000, // Default to 30 seconds
+      }
     }
     if (_config.username && _config.password) {
       this.cacheConfig.options.username = _config.username
       this.cacheConfig.options.password = _config.password
-      this.cacheConfig.options.socket.tls = _config.tls || true
+      this.cacheConfig.options.socket.tls = !!_config.tls
       // skip certificate hostname validation
       if (_config.checkServerIdentity) {
         this.cacheConfig.options.socket.checkServerIdentity = _config.checkServerIdentity
@@ -74,24 +70,19 @@ export class RedisClass implements CacheClass {
             rootNodes: (this.cacheConfig.nodeList)
               ? this.cacheConfig.nodeList.map((url: string) => ({ url: `redis://${url}` }))
               : [{ url: `redis://${this.cacheConfig.url}` }],
+            useReplicas: !!(this.cacheConfig.nodeList),
           })
           : createClient({
-            url: this.cacheConfig.url, ...this.cacheConfig.options, legacyMode: false,
+            url: `redis://${this.cacheConfig.url}`, ...this.cacheConfig.options, legacyMode: false,
           })
+        const logList = ['reconnecting', 'end', 'ready', 'connect']
+        logList.forEach((event) => {
+          newClient.on(event, (err: any) => {
+            this.logger.info({ event: `Redis (${this.cacheConfig.url}) ${event}`, err })
+          })
+        })
         newClient.on('error', (err: any) => {
           this.logger.error({ event: `Redis (${this.cacheConfig.url}) error`, err })
-        })
-        newClient.on('reconnecting', () => {
-          this.logger.error({ event: `Redis (${this.cacheConfig.url}) reconnecting` })
-        })
-        newClient.on('end', () => {
-          this.logger.error({ event: `Redis (${this.cacheConfig.url}) end` })
-        })
-        newClient.on('ready', () => {
-          this.logger.info({ event: `Redis (${this.cacheConfig.url}) ready` })
-        })
-        newClient.on('connect', () => {
-          this.logger.info({ event: `Redis (${this.cacheConfig.url}) connect` })
         })
 
         await newClient.connect()
@@ -147,8 +138,12 @@ export class RedisClass implements CacheClass {
     if (!this.cacheClient) await this.connect()
     const hashKey = `${this.cacheConfig.cacheHeader}${RedisClass.hashkeyOf(_query)}`
     const result = await this.cacheClient.get(hashKey)
+    if (!result) {
+      return undefined
+    }
+    const parsedResult = JSON.parse(result)
     const ttl = await this.cacheClient.ttl(hashKey)
-    return { ...result, ttl }
+    return { ...parsedResult, ttl }
   }
 
   static hashkeyOf(_query: Query) {
@@ -161,7 +156,19 @@ export class RedisClass implements CacheClass {
   async buildCache(_query: Query, _result: QueryResult, customTTL?: number) {
     if (!this.cacheClient) await this.connect()
     const hashKey = `${this.cacheConfig.cacheHeader}${RedisClass.hashkeyOf(_query)}`
-    await this.cacheClient.set(hashKey, _result, customTTL || this.cacheConfig.cacheTTL)
+    // get a lock to make sure only one process is writing to the cache
+    const lockKey = `${hashKey}:lock`
+    const lockTTL = 10 // 10s
+    const lock = await this.cacheClient.set(lockKey, '1', {
+      EX: lockTTL,
+      NX: true,
+    })
+    if (lock === 'OK') {
+      await this.cacheClient.set(hashKey, JSON.stringify(_result), {
+        EX: customTTL || this.cacheConfig.cacheTTL,
+      })
+      await this.cacheClient.del(lockKey)
+    }
   }
 
   async clearCache(_query: Query) {

@@ -20,6 +20,11 @@ describe('DBConnectorClass', () => {
       disconnect: sinon.stub(),
       isconnect: sinon.stub().resolves(true),
       buildSelectQuery: sinon.stub().returns({ text: 'SELECT * FROM users', fields: [] }),
+      buildInsertQuery: sinon.stub(),
+      buildUpdateQuery: sinon.stub(),
+      buildUpsertQuery: sinon.stub(),
+      buildDeleteQuery: sinon.stub(),
+      getConfig: sinon.stub().returns({ revalidate: 3600 }),
       query: sinon.stub().resolves({ rows: [{ id: 'key1' }], count: 1 }),
       select: sinon.stub(),
       insert: sinon.stub(),
@@ -27,18 +32,32 @@ describe('DBConnectorClass', () => {
       upsert: sinon.stub(),
       delete: sinon.stub(),
     }
-    replicaDB = {
-      connect: sinon.stub(),
-      disconnect: sinon.stub(),
-      isconnect: sinon.stub().resolves(false),
-      buildSelectQuery: sinon.stub(),
-      query: sinon.stub().resolves({ rows: [{ id: 'key2' }], count: 2 }),
-      select: sinon.stub(),
-      insert: sinon.stub(),
-      update: sinon.stub(),
-      upsert: sinon.stub(),
-      delete: sinon.stub(),
-    }
+    replicaDB = [
+      {
+        connect: sinon.stub(),
+        disconnect: sinon.stub(),
+        isconnect: sinon.stub().resolves(false),
+        buildSelectQuery: sinon.stub(),
+        query: sinon.stub().resolves({ rows: [{ id: 'key2' }], count: 2 }),
+        select: sinon.stub(),
+        insert: sinon.stub(),
+        update: sinon.stub(),
+        upsert: sinon.stub(),
+        delete: sinon.stub(),
+      },
+      {
+        connect: sinon.stub(),
+        disconnect: sinon.stub(),
+        isconnect: sinon.stub().resolves(false),
+        buildSelectQuery: sinon.stub(),
+        query: sinon.stub().resolves({ rows: [{ id: 'key2' }], count: 2 }),
+        select: sinon.stub(),
+        insert: sinon.stub(),
+        update: sinon.stub(),
+        upsert: sinon.stub(),
+        delete: sinon.stub(),
+      },
+    ]
     redis = {
       connect: sinon.stub(),
       disconnect: sinon.stub(),
@@ -67,53 +86,88 @@ describe('DBConnectorClass', () => {
   describe('connect, disconnect, isconnect', () => {
     it('should call connect for all db', async () => {
       masterDB.connect.resetHistory()
-      replicaDB.connect.resetHistory()
+      replicaDB.forEach((element: any) => {
+        element.connect.resetHistory()
+      })
       redis.connect.resetHistory()
       await dbConnector.connect()
       assert.strictEqual(masterDB.connect.callCount, 1)
-      assert.strictEqual(replicaDB.connect.callCount, 1)
+      // assert.strictEqual(replicaDB.connect.callCount, 1)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.connect.callCount, 1)
+      })
       assert.strictEqual(redis.connect.callCount, 1)
       await dbConnector2.connect()
       assert.strictEqual(masterDB.connect.callCount, 2)
-      assert.strictEqual(replicaDB.connect.callCount, 2)
+      // assert.strictEqual(replicaDB.connect.callCount, 2)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.connect.callCount, 2)
+      })
       assert.strictEqual(redis.connect.callCount, 1)
       await dbConnector3.connect()
       assert.strictEqual(masterDB.connect.callCount, 3)
-      assert.strictEqual(replicaDB.connect.callCount, 2)
+      // assert.strictEqual(replicaDB.connect.callCount, 2)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.connect.callCount, 2)
+      })
       assert.strictEqual(redis.connect.callCount, 1)
     })
     it('should call disconnect for all db', async () => {
       masterDB.disconnect.resetHistory()
-      replicaDB.disconnect.resetHistory()
+      // replicaDB.disconnect.resetHistory()
+      replicaDB.forEach((element: any) => {
+        element.disconnect.resetHistory()
+      })
       redis.disconnect.resetHistory()
       await dbConnector.disconnect()
       assert.strictEqual(masterDB.disconnect.callCount, 1)
-      assert.strictEqual(replicaDB.disconnect.callCount, 1)
+      // assert.strictEqual(replicaDB.disconnect.callCount, 1)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.disconnect.callCount, 1)
+      })
       assert.strictEqual(redis.disconnect.callCount, 1)
       await dbConnector2.disconnect()
       assert.strictEqual(masterDB.disconnect.callCount, 2)
-      assert.strictEqual(replicaDB.disconnect.callCount, 2)
+      // assert.strictEqual(replicaDB.disconnect.callCount, 2)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.disconnect.callCount, 2)
+      })
       assert.strictEqual(redis.disconnect.callCount, 1)
       await dbConnector3.disconnect()
       assert.strictEqual(masterDB.disconnect.callCount, 3)
-      assert.strictEqual(replicaDB.disconnect.callCount, 2)
+      // assert.strictEqual(replicaDB.disconnect.callCount, 2)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.disconnect.callCount, 2)
+      })
       assert.strictEqual(redis.disconnect.callCount, 1)
     })
     it('should call isconnect for all db', async () => {
       masterDB.isconnect.resetHistory()
-      replicaDB.isconnect.resetHistory()
+      // replicaDB.isconnect.resetHistory()
+      replicaDB.forEach((element: any) => {
+        element.isconnect.resetHistory()
+      })
       redis.isconnect.resetHistory()
       assert.strictEqual(await dbConnector.isconnect(), false)
       assert.strictEqual(masterDB.isconnect.callCount, 1)
-      assert.strictEqual(replicaDB.isconnect.callCount, 1)
+      // assert.strictEqual(replicaDB.isconnect.callCount, 1)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.isconnect.callCount, 1)
+      })
       assert.strictEqual(redis.isconnect.callCount, 1)
       assert.strictEqual(await dbConnector2.isconnect(), false)
       assert.strictEqual(masterDB.isconnect.callCount, 2)
-      assert.strictEqual(replicaDB.isconnect.callCount, 2)
+      // assert.strictEqual(replicaDB.isconnect.callCount, 2)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.isconnect.callCount, 2)
+      })
       assert.strictEqual(redis.isconnect.callCount, 1)
       assert.strictEqual(await dbConnector3.isconnect(), true)
       assert.strictEqual(masterDB.isconnect.callCount, 3)
-      assert.strictEqual(replicaDB.isconnect.callCount, 2)
+      // assert.strictEqual(replicaDB.isconnect.callCount, 2)
+      replicaDB.forEach((element: any) => {
+        assert.strictEqual(element.isconnect.callCount, 2)
+      })
       assert.strictEqual(redis.isconnect.callCount, 1)
     })
   })
@@ -129,13 +183,20 @@ describe('DBConnectorClass', () => {
   describe('query and select', () => {
     const resetQueryHistory = () => {
       masterDB.query.resetHistory()
-      replicaDB.query.resetHistory()
+      // replicaDB.query.resetHistory()
+      replicaDB.forEach((element: any) => {
+        element.query.resetHistory()
+      })
       redis.query.resetHistory()
       redis.buildCache.resetHistory()
     }
     const strictEqualCheck = (masterC: number, replicaC: number, rC: number, bCC: number) => {
       assert.strictEqual(masterDB.query.callCount, masterC)
-      assert.strictEqual(replicaDB.query.callCount, replicaC)
+      const sumOfCalls: number = replicaDB.reduce(
+        (acc: number, db: any) => acc + db.query.callCount,
+        0,
+      )
+      assert.strictEqual(sumOfCalls, replicaC)
       assert.strictEqual(redis.query.callCount, rC)
       assert.strictEqual(redis.buildCache.callCount, bCC)
     }
@@ -159,6 +220,8 @@ describe('DBConnectorClass', () => {
       // if cache is available, read query goes to redis, and cache is updated
       resetQueryHistory()
       await dbConnector.query({ text: '', values: [] })
+      // wait 0.01 seconds for redis to update cache
+      await new Promise<void>((resolve) => { setTimeout(resolve, 10) })
       strictEqualCheck(0, 1, 1, 1)
       await dbConnector2.query({ text: '', values: [] })
       strictEqualCheck(0, 2, 1, 1)
@@ -175,6 +238,8 @@ describe('DBConnectorClass', () => {
       // if cache is not available, query to db and save to cache
       resetQueryHistory()
       await dbConnector.query({ text: 'no cache', values: [] })
+      // wait 0.01 seconds for redis to update cache
+      await new Promise<void>((resolve) => { setTimeout(resolve, 10) })
       strictEqualCheck(0, 1, 1, 1)
       await dbConnector2.query({ text: 'no cache', values: [] })
       strictEqualCheck(0, 2, 1, 1)
@@ -213,32 +278,61 @@ describe('DBConnectorClass', () => {
         2,
         false,
       )
+      // wait 0.01 seconds for redis to update cache
+      await new Promise<void>((resolve) => { setTimeout(resolve, 10) })
       strictEqualCheck(0, 2, 1, 1)
     })
   })
 
   describe('insert, update, upsert, delete', () => {
     it('these calls should all go to masterDB', async () => {
-      masterDB.insert.resetHistory()
+      masterDB.query.resetHistory()
       await dbConnector.insert('users', [])
       await dbConnector2.insert('users', [])
       await dbConnector3.insert('users', [])
-      assert.strictEqual(masterDB.insert.callCount, 3)
-      masterDB.update.resetHistory()
+      assert.strictEqual(masterDB.query.callCount, 3)
+      masterDB.query.resetHistory()
       await dbConnector.update('users', [], { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector2.update('users', [], { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector3.update('users', [], { array: [{ field: 'id', value: true }], is_or: false })
-      assert.strictEqual(masterDB.update.callCount, 3)
-      masterDB.upsert.resetHistory()
+      assert.strictEqual(masterDB.query.callCount, 3)
+      masterDB.query.resetHistory()
       await dbConnector.upsert('users', [], [])
       await dbConnector2.upsert('users', [], [])
       await dbConnector3.upsert('users', [], [])
-      assert.strictEqual(masterDB.upsert.callCount, 3)
-      masterDB.delete.resetHistory()
+      assert.strictEqual(masterDB.query.callCount, 3)
+      masterDB.query.resetHistory()
       await dbConnector.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector2.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector3.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
-      assert.strictEqual(masterDB.delete.callCount, 3)
+      assert.strictEqual(masterDB.query.callCount, 3)
+    })
+
+    it('build query calls should also go to masterDB', () => {
+      masterDB.buildInsertQuery.resetHistory()
+      dbConnector.buildInsertQuery('users', [])
+      assert(masterDB.buildInsertQuery.calledOnce)
+      masterDB.buildUpdateQuery.resetHistory()
+      dbConnector.buildUpdateQuery('users', [], { array: [{ field: 'id', value: true }], is_or: false })
+      assert(masterDB.buildUpdateQuery.calledOnce)
+      masterDB.buildUpsertQuery.resetHistory()
+      dbConnector.buildUpsertQuery('users', [], [])
+      assert(masterDB.buildUpsertQuery.calledOnce)
+      masterDB.buildDeleteQuery.resetHistory()
+      dbConnector.buildDeleteQuery('users', { array: [{ field: 'id', value: true }], is_or: false })
+      assert(masterDB.buildDeleteQuery.calledOnce)
+    })
+  })
+
+  describe('buildCache', () => {
+    it('should call buildCache for redis', async () => {
+      masterDB.isconnect.resetHistory()
+      redis.isconnect.resetHistory()
+      redis.buildCache.resetHistory()
+      await dbConnector.buildCache({ text: 'SELECT * FROM users', values: [] })
+      assert.strictEqual(masterDB.isconnect.callCount, 1)
+      assert.strictEqual(redis.isconnect.callCount, 1)
+      assert.strictEqual(redis.buildCache.callCount, 1)
     })
   })
 })
