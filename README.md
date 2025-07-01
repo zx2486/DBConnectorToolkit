@@ -193,6 +193,7 @@ await delete('users',
 Unit test cases
 Currently this only support postgresSQL connection using node-postgres, redis connection using ioredis, kafka queue using kafkajs.
 Support of other databases / noSQL database, nodecache for caching, and RabbitMQ as message queue.
+Support of db transaction when message queue is used to centralize db writes.
 
 ## Motivations
 When we learn programming and read / write data to SQL database, we use libraries like node-postgres and interacts with master database directly.
