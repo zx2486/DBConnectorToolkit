@@ -11,7 +11,7 @@ npm install dbconnectortoolkit
 ## Sample use case
 Suppose you have a postgres database (web) and would like to select data from it.
 ```typescript
-const dbConnector = require('../../../DBConnectorToolkit/dist').default;
+const dbConnector = require('dbconnectortoolkit').default;
 
 const masterDBConfig = {
   client: 'pg',
