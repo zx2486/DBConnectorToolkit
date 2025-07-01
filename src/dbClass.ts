@@ -148,8 +148,9 @@ export default class PgClass implements DBClass {
   }
 
   static validateValue = (value: any) => {
-    // check if value is a string, number, or boolean
-    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+    // check if value is a string, number, boolean, or object
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean'
+      && (typeof value !== 'object' || Array.isArray(value))) {
       throw new Error('Invalid value')
     }
   }

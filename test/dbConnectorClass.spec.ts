@@ -24,6 +24,7 @@ describe('DBConnectorClass', () => {
       buildUpdateQuery: sinon.stub(),
       buildUpsertQuery: sinon.stub(),
       buildDeleteQuery: sinon.stub(),
+      getConfig: sinon.stub().returns({ revalidate: 3600 }),
       query: sinon.stub().resolves({ rows: [{ id: 'key1' }], count: 1 }),
       select: sinon.stub(),
       insert: sinon.stub(),
@@ -285,26 +286,26 @@ describe('DBConnectorClass', () => {
 
   describe('insert, update, upsert, delete', () => {
     it('these calls should all go to masterDB', async () => {
-      masterDB.insert.resetHistory()
+      masterDB.query.resetHistory()
       await dbConnector.insert('users', [])
       await dbConnector2.insert('users', [])
       await dbConnector3.insert('users', [])
-      assert.strictEqual(masterDB.insert.callCount, 3)
-      masterDB.update.resetHistory()
+      assert.strictEqual(masterDB.query.callCount, 3)
+      masterDB.query.resetHistory()
       await dbConnector.update('users', [], { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector2.update('users', [], { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector3.update('users', [], { array: [{ field: 'id', value: true }], is_or: false })
-      assert.strictEqual(masterDB.update.callCount, 3)
-      masterDB.upsert.resetHistory()
+      assert.strictEqual(masterDB.query.callCount, 3)
+      masterDB.query.resetHistory()
       await dbConnector.upsert('users', [], [])
       await dbConnector2.upsert('users', [], [])
       await dbConnector3.upsert('users', [], [])
-      assert.strictEqual(masterDB.upsert.callCount, 3)
-      masterDB.delete.resetHistory()
+      assert.strictEqual(masterDB.query.callCount, 3)
+      masterDB.query.resetHistory()
       await dbConnector.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector2.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
       await dbConnector3.delete('users', { array: [{ field: 'id', value: true }], is_or: false })
-      assert.strictEqual(masterDB.delete.callCount, 3)
+      assert.strictEqual(masterDB.query.callCount, 3)
     })
 
     it('build query calls should also go to masterDB', () => {

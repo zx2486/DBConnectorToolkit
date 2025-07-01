@@ -131,7 +131,7 @@ describe('PgClass', () => {
       })
 
       // Invalid values
-      const invalidIdentifiers = [{}, [], () => { }, undefined]
+      const invalidIdentifiers = [[], () => { }, undefined]
       invalidIdentifiers.forEach((c) => {
         assert.throws(() => PgClass.validateValue(c), new Error('Invalid value'))
       })
@@ -550,7 +550,7 @@ describe('PgClass', () => {
         {
           table: [{ table: 'users' }],
           fields: ['id', 'name'],
-          conditions: { array: [{ field: 'age', value: {} }], is_or: true },
+          conditions: { array: [{ field: 'age', value: [] }], is_or: true },
           errMsg: 'Invalid value',
         },
       ]
@@ -744,7 +744,7 @@ describe('PgClass', () => {
         },
         {
           table: 'users',
-          data: { name: 'test', age: 30, active: { a: 1 } },
+          data: { name: 'test', age: 30, active: ['a', 1] },
           errMsg: 'Invalid value',
         },
         {
@@ -820,7 +820,7 @@ describe('PgClass', () => {
         },
         {
           table: 'users',
-          data: { name: 'test', age: 30, active: { a: 1 } },
+          data: { name: 'test', age: 30, active: [{ a: 1 }] },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
           errMsg: 'Invalid value',
         },
@@ -980,7 +980,7 @@ describe('PgClass', () => {
           table: 'users',
           indexData: ['id'],
           data: {
-            id: 1, name: 'test', age: 30, active: { a: 1 },
+            id: 1, name: 'test', age: 30, active: [{ a: 1 }],
           },
           errMsg: 'Invalid value',
         },
