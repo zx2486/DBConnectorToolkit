@@ -67,7 +67,7 @@ describe('ioredisClass', () => {
       await Promise.all(invalidConfigs.map(async (c) => {
         await assert.rejects(
           async () => {
-            const redisClassWhcihNotWork = new IORedisClass(c)
+            const redisClassWhichNotWork = new IORedisClass(c)
             assert.fail(new Error(`should throw error but did not ${c}`))
           },
           (err: Error) => {

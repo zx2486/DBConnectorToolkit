@@ -67,7 +67,7 @@ describe('redisClass', () => {
       await Promise.all(invalidConfigs.map(async (c) => {
         await assert.rejects(
           async () => {
-            const redisClassWhcihNotWork = new RedisClass(c)
+            const redisClassWhichNotWork = new RedisClass(c)
             assert.fail(new Error(`should throw error but did not ${c}`))
           },
           (err: Error) => {

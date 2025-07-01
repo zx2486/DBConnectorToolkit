@@ -3,6 +3,7 @@ import bunyan from 'bunyan'
 import {
   Kafka, logLevel, CompressionTypes, EachMessagePayload,
 } from 'kafkajs'
+import * as crypto from 'crypto'
 import type {
   QueueConfig, QueueMessage, QueueClass,
 } from './baseClass'

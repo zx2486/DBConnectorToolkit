@@ -1,4 +1,5 @@
 import bunyan from 'bunyan'
+import * as crypto from 'crypto'
 import type {
   Query, QueryResult, DBClass, TableWithJoin, QueryCondition, QueryOrder, CacheClass, QueueClass,
 } from './baseClass'
