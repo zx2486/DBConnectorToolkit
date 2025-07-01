@@ -1,13 +1,18 @@
 {
   "name": "dbconnectortoolkit",
-  "version": "0.0.2-SNAPSHOT.4",
+  "version": "0.1.1",
   "description": "This module provides an integrated tool to connect database under different settings",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "lint": "eslint src/**/*.ts",
     "test": "mocha --require ts-node/register 'test/**/*.spec.ts'",
     "coverage": "nyc --reporter=text --reporter=html npm test",
-    "build": "tsc"
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
