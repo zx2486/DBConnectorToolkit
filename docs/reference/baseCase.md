@@ -242,8 +242,10 @@ QueueMessage = {
 }
 ```
 
-Basic QueueClass interface, all objects connecting to a queue system should implement this
-For Kafka, the send function will always return null as direct message reply is not supported
+Basic QueueClass interface, all objects connecting to a queue system should implement this.
+To use as a producer, set _isProducer to true on related function calls. false for consumer.
+If both producer and consumer are needed, call connect/disconnect twice, with _isProducer set to true or false accordingly.
+Remember to call disconnect for both producer and consumer when shuting down.
 ```typescript
 QueueClass {
   connect(_isProducer: boolean): Promise<void>
