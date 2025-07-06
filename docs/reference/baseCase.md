@@ -35,6 +35,7 @@ TableWithJoin = {
 
 QueryData type, it defines the structure of a query data.
 But it is for internal use only, what data input is likely an object.
+
 Example: What input to the methods is: {name:'John},
 what it is internally: { field: 'name', value: 'John' }
 ```typescript
@@ -42,24 +43,32 @@ QueryData = { field: string, value: any }
 ```
 
 QueryCondition type, it defines the structure of a query condition.
+
 Example: { field: 'name', comparator: '=', value: 'John' }
-Supported comparators: =|!=|<>|<|<=|>|>=|LIKE|ILIKE
-Supported values: string | number | boolean | object (not array)
-It also allows shorten syntax for most use cases
-Example: ['name', '=', 'John'], ['name', 'John'] (two are equivalent)
+
+Supported comparators: =|!=|<>|<|<=|>|>=|LIKE|ILIKE.
+Supported values: string | number | boolean | object (not array).
+
+It also allows shorten syntax for most use cases.
+
+Example: ['name', '=', 'John'], ['name', 'John'] (two are equivalent).
+
 Example: ['post', '!=', 5], ['phone_number', 'IS NULL'], ['user_posts', '>=', 5]
 ```typescript
 QueryCondition = { field: string, comparator?: string, value: any } | any[3] | any[2]
 ```
 
 QueryOrder type, it defines the structure of a query order.
+
 Example: { field: 'name', is_asc: true } ==> ORDER BY name ASC
 ```typescript
 QueryOrder = { field: string, is_asc: boolean }
 ```
 
 DBConfig type, it defines the structure of a database config.
-client: string, it defines the type of database client, e.g. 'pg', 'mysql'
+
+client: string, it defines the type of database client, e.g. 'pg', 'mysql'.
+
 Actual implementation depends on the database type.
 ```typescript
 DBConfig = {
@@ -80,10 +89,14 @@ DBConfig = {
 
 Basic DBClass interface, all objects managing a database client should implement this.
 By default all methods are async and to be done using pool.
+
 To gurantee operation is done by a single connection or doing transactions, get a raw client
+
 Supported db methods: select, insert, update, upsert, delete, transactions.
 You may use query directly for other queries.
+
 dbConnectorClass, the main class for external use, is an implementation of this interface.
+
 Most of the methods are done by masterDB, while select/query can be done by replica or cache.
 ```typescript
 DBClass {
@@ -143,10 +156,15 @@ DBClass {
 ```
 
 Basic CacheConfig type, it defines the structure of a cache config.
-client: string, it defines the type of cache client, e.g. 'redis', 'nodecache'
+
+client: string, it defines the type of cache client, e.g. 'ioredis', 'redis', 'nodecache'.
+
 Actual implementation depends on the cache type. Times are in seconds.
+
 reconnectOnError only works with ioredis, it will determine whether to reconnect on error.
+
 pingInterval is the interval to ping the cache server to keep the connection alive.
+
 pingInterval, slotsRefreshTimeout, slotsRefreshInterval only works with redis, not ioredis.
 ```typescript
 CacheConfig = {
@@ -175,8 +193,11 @@ CacheConfig = {
 ```
 
 Basic CacheClass interface, all objects connecting to a cache should implement this.
-One may get data using query, and build cache using buildCache.
-_query is used as the key to the data
+
+One may get data using query, and build cache manually using buildCache.
+
+Hash of _query is used as the key to the data
+
 getPoolClient provides a raw client for special operations.
 ```typescript
 CacheClass {
@@ -193,7 +214,9 @@ CacheClass {
 ```
 
 Basic QueueConfig type, it defines the structure of a queue db connection config.
+
 client: string, it defines the type of queue client, e.g. 'kafka'
+
 dbtopic: string, it defines the topic to send when write queries reach the dbConnectorClass
 ```typescript
 QueueConfig = {
@@ -231,7 +254,9 @@ QueueConfig = {
 ```
 
 QueueMessage type, it defines the structure of a queue message to send.
-headers and ingressionTs are added by producer inside the library and should only be used on the consumer side.
+
+headers and ingressionTs are added by producer inside the library and handled on the consumer side.
+
 ```typescript
 QueueMessage = {
   topic: string,
@@ -243,6 +268,7 @@ QueueMessage = {
 ```
 
 Basic QueueClass interface, all objects connecting to a queue system should implement this.
+
 To use as a producer, set _isProducer to true on related function calls. false for consumer.
 If both producer and consumer are needed, call connect/disconnect twice, with _isProducer set to true or false accordingly.
 Remember to call disconnect for both producer and consumer when shuting down.

@@ -6,7 +6,7 @@ DBConnectorToolkit
 
 This library provides an integrated tool to access data, in order to minimize code change when moving from single database to database clusters with read replica, caching layer and centralized database write handling.
 
-We have created a demo website (`Git <https://github.com/zx2486/DBConnectorSampleWeb>`_) to illustrate how this library works.
+We have created a demo website ([DBConnectorSampleWeb](https://github.com/zx2486/DBConnectorSampleWeb)) to illustrate how this library works.
 
 Motivations
 -----------
@@ -36,7 +36,8 @@ Contents
 --------
 
 .. toctree::
-
+   :maxdepth: 2
+   
    gettingstarted
    usage
    reference

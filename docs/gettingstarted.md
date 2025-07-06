@@ -42,7 +42,7 @@ try {
 }
 ```
 
-2) Distribute read queries to read replica databases while write ones stil go to master
+2) Distribute read queries to read replica databases while write ones still go to master
 ```typescript
 const replicaDBConfig = [
     // an array of replica setup, same format of masterDBConfig
@@ -70,7 +70,7 @@ db = dbConnector(masterDBConfig, replicaDBConfig, cacheConfig);
 
 Sending write queries to message queue
 --------------------------------------
-If backend is arranged in multiple layers and public facing pods should not have database write access directly. Before this work, there will be a need to change code to redirect every write request to processing nodes.
+Sometimes backend is arranged in multiple layers and public facing pods should not have database write access directly. Before this work, there will be a need to change code to redirect every write request to processing nodes.
 Using thie library, the change is only a few.
 
 For public facing nodes, just add the message queue config to dbConnector. Then all write requests will be sent to the message queue.

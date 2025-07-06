@@ -11,14 +11,16 @@ dbConnector function
 --------------------
 Main entry point for database connection.
 This function creates a DBConnectorClass instance for external use.
-masterConfig
-replicaConfig is optional and can be an array of PostgreSQL configs.
+
+masterConfig is required. If there is no other config, all queries will be done by master DB.
+
+replicaConfig is optional and can be an array of DBConfig configs.
 Read queries will be randomly distributed among replicas and there is no failover mechanism.
-redisConfig is optional and can be a Redis config. Queries result will be cached in Redis
-@param masterConfig required, if no other config, all queries will be done by master DB.
-@param replicaConfig optional, Read (SELECT) queries will be randomly distributed among replicas.
-If selected replica goes wrong, will failback to master to handle the query.
-@param cacheConfig optional and can be a Redis config. Queries result will be cached in Redis
+
+cacheConfig is optional and can be a CacheConfig config. Query results will be cached in supported cache layer.
+
+msgQueueConfig is optional and can be a msgQueueConfig config. Write queries will be sent to the message queue and processed asynchronously.
+
 @returns Object of DBConnector Class, which is an implementation of DBClass interface.
 
 ```typescript
