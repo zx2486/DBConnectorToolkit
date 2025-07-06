@@ -40,19 +40,3 @@ Contents
    gettingstarted
    usage
    reference
-
-Move Readme Sample use case last section ==> Usage
-Running queries ==> Usage
-
-to docs
-index.md should have:
-
-Sample use case (even shorter version)
-
-Usage should have:
-
-Running queries
-Sending write queries to message queue
-
-A folder called Classes
-inside there are one file for each class.
