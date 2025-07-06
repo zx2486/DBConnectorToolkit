@@ -1,6 +1,6 @@
 {
   "name": "dbconnectortoolkit",
-  "version": "0.1.2-SNAPSHOT.0",
+  "version": "0.1.2",
   "description": "This module provides an integrated tool to connect database under different settings",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
