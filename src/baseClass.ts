@@ -57,14 +57,13 @@ export type QueryData = { field: string, value: any }
  * QueryCondition type, it defines the structure of a query condition.
  * Example: { field: 'name', comparator: '=', value: 'John' }
  * Supported comparators: =|!=|<>|<|<=|>|>=|LIKE|ILIKE
- * Supported values: string | number | boolean
+ * Supported values: string | number | boolean | object (not array)
  * It also allows shorten syntax for most use cases
  * Example: ['name', '=', 'John'], ['name', 'John'] (two are equivalent)
  * Example: ['post', '!=', 5], ['phone_number', 'IS NULL'], ['user_posts', '>=', 5]
  */
 export type QueryCondition = { field: string, comparator?: string, value: any }
   | any[3] | any[2]
-// | [string, string, string | number | boolean] | [string, string | number | boolean]
 /**
  * QueryOrder type, it defines the structure of a query order.
  * Example: { field: 'name', is_asc: true } ==> ORDER BY name ASC
@@ -156,7 +155,7 @@ export interface DBClass {
 }
 
 /**
- * Basic CacheConfig class, it defines the structure of a cache config.
+ * Basic CacheConfig type, it defines the structure of a cache config.
  * client: string, it defines the type of cache client, e.g. 'redis', 'nodecache'
  * Actual implementation depends on the cache type. Times are in seconds.
  * reconnectOnError only works with ioredis, it will determine whether to reconnect on error.
@@ -210,7 +209,7 @@ export interface CacheClass {
  * client: string, it defines the type of queue client, e.g. 'kafka'
  * dbtopic: string, it defines the topic to send when write queries reach the dbConnectorClass
  */
-export interface QueueConfig {
+export type QueueConfig = {
   client: string,
   appName: string,
   brokerList: string[],
