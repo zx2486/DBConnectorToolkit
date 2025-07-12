@@ -4,12 +4,12 @@ Usage
 This page discusses how to use an object of dbConnector to run different kinds of queues.
 You may check the reference for functions' details.
 
-No matter what kind of database and settigns you are using, the basic usage is the same.
+No matter what kind of database and settings you are using, the basic usage is the same.
 All queries are run asynchronously and return a Promise of QueryResult.
 ```typescript
 {
     rows: any[], // array of rows returned from the query
-    rowCount: number, // number of rows returned
+    count: number, // number of rows returned
     ttl: number || undefined, // time to live in seconds, only available when reading from cache
 }
 ```
@@ -30,6 +30,25 @@ Running raw queries is done by the `query` async method.
  * @param _getLatest, default is false, true means the query result will come from db instead of cache. (replica if available)
  */
 query(_query: Query, _isWrite?: boolean, _getLatest?: boolean): Promise<QueryResult>
+```
+
+Caching for read queries
+------------------------
+If _getLatest is false and cached data is available, cache will be returned. If cache is within the revalidate period, the cache will be revalidated in a separate async call.
+
+The key of the cache stored in the caching node may be different across implementations. For IORedisClass, it will start with the cacheHeader defined in cacheConfig, followed by the sha256 hash of the whole Query, text and values.
+
+Therefore, if the same queries are called with different values, their caches will be independent.
+
+Example implementation in IORedisClass
+```typescript
+static hashkeyOf(_query: Query) {
+    const hash = createHash('sha256')
+    const queryString = _query.text + JSON.stringify(_query.values)
+    hash.update(queryString)
+    return hash.digest('hex')
+}
+const hashKey = `${this.cacheConfig.cacheHeader}${hashkeyOf(_query)}`
 ```
 
 Select queries

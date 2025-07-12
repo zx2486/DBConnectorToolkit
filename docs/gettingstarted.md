@@ -24,11 +24,11 @@ const masterDBConfig = {
   password: 'your_password',
   database: 'web',
 }
-const dbConnector = dbConnector(masterDBConfig)
+const connector = dbConnector(masterDBConfig)
 try {
-    await dbConnector.connect()
+    await connector.connect()
     // Select all data from the users table
-    const result = await dbConnector.select(
+    const result = await connector.select(
         [{ table: 'users' }],
         ['*']
     )
@@ -38,7 +38,7 @@ try {
     // throw when database cannot login or something wrong with the query
     console.error('Error:', err)
 } finally {
-    await dbConnector.disconnect()
+    await connector.disconnect()
 }
 ```
 

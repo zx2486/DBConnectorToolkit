@@ -207,7 +207,8 @@ export interface CacheClass {
 /**
  * Basic QueueConfig class, it defines the structure of a queue db connection config.
  * client: string, it defines the type of queue client, e.g. 'kafka'
- * dbtopic: string, it defines the topic to send when write queries reach the dbConnectorClass
+ * dbtopic: string, required if using producer.
+ * It defines the topic to send when write queries reach the dbConnectorClass
  */
 export type QueueConfig = {
   client: string,
