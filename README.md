@@ -85,6 +85,12 @@ Currently this only support postgresSQL connection using node-postgres, redis co
 Support of other databases / noSQL database, nodecache for caching, and RabbitMQ as message queue.
 Support of db transaction when message queue is used to centralize db writes.
 
+Databases pending to support: MySQL (MariaDB), MSSQL, Aurora DSQL, Oracle, SQLite
+
+Cache pending to support: memcached, Valkey
+
+Message queue pending to support: Amazon MSK, rabbitMQ, Amazon Simple Queue Service SQS
+
 ## Contributing
 If you want to contribute to this project, please submit a pull request or create an issue for discussion. 
 
