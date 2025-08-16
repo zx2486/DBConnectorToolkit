@@ -8,8 +8,9 @@ import type {
 export default class SQLClass implements DBClass {
   private dbConfig: DBConfig
   protected pool: any
-  private clients: { [key: string]: any } = {}
+  protected clients: { [key: string]: any } = {}
   protected logger: any
+  protected usingQuestionMarkInQuery: boolean = false
 
   constructor(dbConfig: DBConfig, pool: any, logger: any) {
     this.dbConfig = dbConfig
@@ -37,7 +38,10 @@ export default class SQLClass implements DBClass {
     try {
       await Promise.all(Object.keys(this.clients).map(async (id) => {
         if (Object.prototype.hasOwnProperty.call(this.clients, id)) {
-          await this.clients[id].removeAllListeners()
+          // test if removeAllListeners is available before calling
+          if (typeof this.clients[id].removeAllListeners === 'function') {
+            await this.clients[id].removeAllListeners()
+          }
           await this.clients[id].release()
           delete this.clients[id]
         }
@@ -60,12 +64,14 @@ export default class SQLClass implements DBClass {
   }
 
   async query(_query: Query, _isWrite: boolean = false, _getLatest: boolean = false) {
-    if (!(await this.isconnect())) {
+    if (!(await this.isconnect()) && typeof this.pool.connect === 'function') {
       await this.pool.connect()
     }
     try {
       const result = await this.pool.query(_query.text, _query.values)
-      return { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
+      return (result && result.rows && result.rowCount)
+        ? { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
+        : { rows: result, count: result.length || 0, ttl: undefined }
     } catch (err) {
       this.logger.error({ event: 'query', err })
       // throw new Error('Invalid SQL query')
@@ -138,7 +144,7 @@ export default class SQLClass implements DBClass {
     }
   }
 
-  static queryConditionToString = (
+  queryConditionToString = (
     _conditions: { array: QueryCondition[], is_or: boolean },
     valueCount: number = 0,
   ): { condition: string, conditionV: any[] } => {
@@ -179,8 +185,15 @@ export default class SQLClass implements DBClass {
           throw new Error(`Invalid condition: ${JSON.stringify(c)}`)
         })
       if (conditionStrict.length > 0) {
+        const questionMarkOrDollarSign = (value: any) => {
+          if (this.usingQuestionMarkInQuery) {
+            conditionV.push(value)
+            return ' ?'
+          }
+          return ` $${conditionV.push(value) + valueCount}`
+        }
         return {
-          condition: ` WHERE ${conditionStrict.map((c) => `${c.field} ${c.comparator || '='}${(c.value) ? ` $${conditionV.push(c.value) + valueCount}` : ''}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`,
+          condition: ` WHERE ${conditionStrict.map((c) => `${c.field} ${c.comparator || '='}${(c.value) ? questionMarkOrDollarSign(c.value) : ''}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`,
           conditionV,
         }
       }
@@ -239,7 +252,7 @@ export default class SQLClass implements DBClass {
       tableQuery += _table.slice(1).map((t) => ` ${t.join_type ? `${t.join_type} JOIN` : ''} ${t.table}${t.name ? ` AS ${t.name}` : ''} ON ${t.on ? t.on.map(({ left, right }) => `${left} = ${right}`).join(' AND ') : 'TRUE'}`).join('')
     }
     const values: any[] = []
-    const { condition, conditionV } = (_conditions) ? SQLClass.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
+    const { condition, conditionV } = (_conditions) ? this.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
     values.push(...conditionV)
     let order = ''
     if (_order && _order.length > 0) {
@@ -256,12 +269,18 @@ export default class SQLClass implements DBClass {
     let limit = ''
     if (_limit) {
       if (!Number.isInteger(_limit) || _limit < 0) { throw new Error('Invalid limit value') }
-      limit = ` LIMIT $${values.push(_limit)}`
+      if (this.usingQuestionMarkInQuery) {
+        limit = ' LIMIT ?'
+        values.push(_limit)
+      } else limit = ` LIMIT $${values.push(_limit)}`
     }
     let offset = ''
     if (_offset) {
       if (!Number.isInteger(_offset) || _offset < 0) { throw new Error('Invalid offset value') }
-      offset = ` OFFSET $${values.push(_offset)}`
+      if (this.usingQuestionMarkInQuery) {
+        offset = ' OFFSET ?'
+        values.push(_offset)
+      } else offset = ` OFFSET $${values.push(_offset)}`
     }
     const query: Query = { text: `${fieldQuery}${tableQuery}${condition}${order}${limit}${offset}`, values }
     // Do not validate query for now to save time
@@ -313,7 +332,7 @@ export default class SQLClass implements DBClass {
       fieldSet.add(field)
     })
     const fieldQuery: string = `INSERT INTO ${_table} (${data.map(({ field }) => field).join(', ')})`
-    const valueQuery: string = `VALUES (${data.map((_value, i) => `$${i + 1}`).join(', ')})`
+    const valueQuery: string = `VALUES (${data.map((_value, i) => ((this.usingQuestionMarkInQuery) ? '?' : `$${i + 1}`)).join(', ')})`
     const values: any[] = data.map(({ value }) => value)
     const query: Query = { text: `${fieldQuery} ${valueQuery} RETURNING *`, values }
     return query
@@ -358,9 +377,9 @@ export default class SQLClass implements DBClass {
       fieldSet.add(field)
     })
 
-    const fieldQuery: string = `UPDATE ${_table} SET ${data.map(({ field }, i) => `${field} = $${i + 1}`).join(', ')}`
+    const fieldQuery: string = `UPDATE ${_table} SET ${data.map(({ field }, i) => ((this.usingQuestionMarkInQuery) ? `${field} = ?` : `${field} = $${i + 1}`)).join(', ')}`
     const values: any[] = data.map(({ value }) => value)
-    const { condition, conditionV } = (_conditions) ? SQLClass.queryConditionToString(_conditions, values.length) : { condition: '', conditionV: [] }
+    const { condition, conditionV } = (_conditions) ? this.queryConditionToString(_conditions, values.length) : { condition: '', conditionV: [] }
     values.push(...conditionV)
 
     const query: Query = { text: `${fieldQuery}${condition} RETURNING *`, values }
@@ -410,7 +429,7 @@ export default class SQLClass implements DBClass {
       throw new Error('No data fields to update')
     }
     const fieldQuery: string = `INSERT INTO ${_table} (${data.map(({ field }) => field).join(', ')})`
-    const valueQuery: string = `VALUES (${data.map((_value, i) => `$${i + 1}`).join(', ')})`
+    const valueQuery: string = `VALUES (${data.map((_value, i) => ((this.usingQuestionMarkInQuery) ? '?' : `$${i + 1}`)).join(', ')})`
     const conflictQuery: string = `ON CONFLICT (${_indexData.join(', ')}) DO UPDATE SET ${excludedFields
       .map(({ field }) => `${field} = EXCLUDED.${field}`)
       .join(', ')}`
@@ -448,7 +467,7 @@ export default class SQLClass implements DBClass {
       throw new Error('Invalid conditions')
     }
     const values: any[] = []
-    const { condition, conditionV } = (_conditions) ? SQLClass.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
+    const { condition, conditionV } = (_conditions) ? this.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
     values.push(...conditionV)
 
     const query: Query = { text: `DELETE FROM ${_table}${condition} RETURNING *`, values }
