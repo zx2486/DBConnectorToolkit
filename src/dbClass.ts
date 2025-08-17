@@ -11,6 +11,7 @@ export default class SQLClass implements DBClass {
   protected clients: { [key: string]: any } = {}
   protected logger: any
   protected usingQuestionMarkInQuery: boolean = false
+  protected canReturnInUpdate: boolean = true
 
   constructor(dbConfig: DBConfig, pool: any, logger: any) {
     this.dbConfig = dbConfig
@@ -68,10 +69,22 @@ export default class SQLClass implements DBClass {
       await this.pool.connect()
     }
     try {
-      const result = await this.pool.query(_query.text, _query.values)
-      return (result && result.rows && result.rowCount)
-        ? { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
-        : { rows: result, count: result.length || 0, ttl: undefined }
+      const queryText = (this.usingQuestionMarkInQuery)
+        ? _query.text.replace(/\$[\d]+/g, '?') // replace all $1,$2... with ? to avoid issues with mariadb
+        : _query.text
+      const result = await this.pool.query(queryText, _query.values)
+      if (result && result.rows && result.rowCount) {
+        return { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
+      }
+      if (Array.isArray(result)) {
+        // if result is an array, return it as rows
+        return { rows: result, count: result.length || 0, ttl: undefined }
+      }
+      if (typeof result === 'object' && result !== null && 'affectedRows' in result) {
+        return { rows: [], count: result.affectedRows || 0, ttl: undefined }
+      }
+      // Other cases
+      return { rows: [], count: 0, ttl: undefined }
     } catch (err) {
       this.logger.error({ event: 'query', err })
       // throw new Error('Invalid SQL query')
@@ -382,7 +395,14 @@ export default class SQLClass implements DBClass {
     const { condition, conditionV } = (_conditions) ? this.queryConditionToString(_conditions, values.length) : { condition: '', conditionV: [] }
     values.push(...conditionV)
 
-    const query: Query = { text: `${fieldQuery}${condition} RETURNING *`, values }
+    // If the system cannot support returning updated rows
+    // return empty rows instead
+    const query: Query = {
+      text: (this.canReturnInUpdate)
+        ? `${fieldQuery}${condition} RETURNING *`
+        : `${fieldQuery}${condition}`,
+      values,
+    }
     return query
   }
 
@@ -434,7 +454,14 @@ export default class SQLClass implements DBClass {
       .map(({ field }) => `${field} = EXCLUDED.${field}`)
       .join(', ')}`
     const values: any[] = data.map(({ value }) => value)
-    const query: Query = { text: `${fieldQuery} ${valueQuery} ${conflictQuery} RETURNING *`, values }
+    // If the system cannot support returning updated rows
+    // return empty rows instead
+    const query: Query = {
+      text: (this.canReturnInUpdate)
+        ? `${fieldQuery} ${valueQuery} ${conflictQuery} RETURNING *`
+        : `${fieldQuery} ${valueQuery} ${conflictQuery}`,
+      values,
+    }
     return query
   }
 

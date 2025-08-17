@@ -2,6 +2,7 @@ import type {
   DBConfig, CacheConfig, DBClass, CacheClass, QueueConfig,
 } from './baseClass'
 import PgClass from './pgClass'
+import MariaClass from './mariaClass'
 
 import RedisClass from './redisClass'
 import IORedisClass from './ioredisClass'
@@ -24,6 +25,7 @@ const getCacheObj = (_cacheConfig?: CacheConfig): CacheClass | undefined => {
 const getDBObj = (_dbConfig?: DBConfig): PgClass | undefined => {
   const supportClasss = new Map<string, typeof PgClass>([
     ['pg', PgClass],
+    ['mariadb', MariaClass],
   ])
   if (!_dbConfig || !_dbConfig.client
     || !supportClasss.has(_dbConfig.client)) {
