@@ -184,6 +184,7 @@ export type CacheConfig = {
   logLevel?: string,
   slotsRefreshTimeout?: number, // timeout on topology refresh, only work with cluster is true
   slotsRefreshInterval?: number, // inteval on topology refresh, only work with cluster is true
+  dnsLookup: ((_address: string, _callback: any) => any) | undefined,
 }
 
 /**
