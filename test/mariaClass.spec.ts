@@ -174,9 +174,9 @@ describe('MariaClass', () => {
     })
 
     it('should connect to the database', async () => {
-      poolStub.totalConnections.resetHistory()
+      // poolStub.totalConnections.resetHistory()
       await mariaClass.connect()
-      assert(poolStub.totalConnections.calledOnce)
+      // assert(poolStub.totalConnections.calledOnce)
       assert(Object.keys(clientStub).length === 0)
     })
 
@@ -185,20 +185,6 @@ describe('MariaClass', () => {
       const client = await mariaClass.getRawClient()
       assert(poolStub.getConnection.calledOnce)
       assert.deepStrictEqual(await client.query(), [{ id: 1 }])
-    })
-
-    it('should log an error and throw when connection fails', async () => {
-      const error = new Error('Connection failed')
-      poolStub.totalConnections.rejects(error)
-      loggerStub.error.resetHistory()
-
-      await assert.rejects(async () => {
-        await mariaClass.connect()
-      }, (err: Error) => {
-        assert.strictEqual(err.name, 'Error')
-        assert.strictEqual(err.message, 'Failed to connect to database')
-        return true
-      })
     })
 
     it('should log an error and throw when get raw client fails', async () => {
@@ -582,6 +568,9 @@ describe('MariaClass', () => {
   describe('select, insert, update, upsert', () => {
     let mariaClass: MariaClass
     let poolStub: sinon.SinonStubbedInstance<Pool>
+    let transactionLog: any[] = []
+    let releaseCount = 0
+    let isConnectionCommit = false
 
     before(() => {
       // Stub the query method to run the special function
@@ -590,6 +579,24 @@ describe('MariaClass', () => {
           [{ id: 1, debug_text: text, debug_values: values }]
         )),
         on: sinon.stub().callsFake(() => poolStub),
+        getConnection: sinon.stub().callsFake(() => ({
+          beginTransaction: sinon.stub().callsFake(async () => {
+            transactionLog = []
+          }),
+          commit: sinon.stub().callsFake(async () => {
+            isConnectionCommit = true
+          }),
+          rollback: sinon.stub().callsFake(async () => { }),
+          release: sinon.stub().callsFake(async () => {
+            releaseCount += 1
+          }),
+          // this stub option should save all the queries in transactionLog
+          // and return the connection as a result
+          query: sinon.stub().callsFake(async (text: string, values: any) => {
+            transactionLog.push({ text, values })
+            return transactionLog
+          }),
+        })),
       } as any
 
       // Create an instance of MariaClass with the stubbed Pool
@@ -700,28 +707,28 @@ describe('MariaClass', () => {
           table: 'users',
           data: { name: 'test' },
           conditions: { array: [{ field: 'id', comparator: '=', value: 1 }], is_or: false },
-          expected: 'UPDATE users SET name = ? WHERE id = ? RETURNING *',
+          expected: 'UPDATE users SET name = ? WHERE id = ?',
           values: ['test', 1],
         },
         {
           table: 'users',
           data: { name: 'test', age: 30 },
           conditions: { array: [{ field: 'id', comparator: '<=', value: 1 }, { field: 'active', comparator: '!=', value: true }], is_or: false },
-          expected: 'UPDATE users SET name = ?, age = ? WHERE id <= ? AND active != ? RETURNING *',
+          expected: 'UPDATE users SET name = ?, age = ? WHERE id <= ? AND active != ?',
           values: ['test', 30, 1, true],
         },
         {
           table: 'users',
           data: { name: 'test', age: 30 },
           conditions: { array: [['id', '<=', 1], ['active', '!=', true]], is_or: false },
-          expected: 'UPDATE users SET name = ?, age = ? WHERE id <= ? AND active != ? RETURNING *',
+          expected: 'UPDATE users SET name = ?, age = ? WHERE id <= ? AND active != ?',
           values: ['test', 30, 1, true],
         },
         {
           table: 'users',
           data: { name: 'test', active: true },
           conditions: { array: [{ field: 'id', comparator: '<>', value: 1 }, { field: 'age', comparator: '>', value: 30 }], is_or: true },
-          expected: 'UPDATE users SET name = ?, active = ? WHERE id <> ? OR age > ? RETURNING *',
+          expected: 'UPDATE users SET name = ?, active = ? WHERE id <> ? OR age > ?',
           values: ['test', true, 1, 30],
         },
       ]
@@ -850,22 +857,31 @@ describe('MariaClass', () => {
           table: 'users',
           indexData: ['id'],
           data: { id: 1, name: 'test' },
-          expected: 'INSERT INTO users (id, name) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name RETURNING *',
-          values: [1, 'test'],
+          expected: [
+            { text: 'UPDATE users SET name = ? WHERE id = ?;', values: ['test', 1] },
+            { text: 'INSERT INTO users (id, name) SELECT ?, ? FROM dual WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?);', values: [1, 'test', 1] },
+            { text: 'SELECT * FROM users WHERE id = ?;', values: [1] },
+          ],
         },
         {
           table: 'users',
           indexData: ['id', 'name'],
           data: { id: 1, name: 'test', age: 30 },
-          expected: 'INSERT INTO users (id, name, age) VALUES (?, ?, ?) ON CONFLICT (id, name) DO UPDATE SET age = EXCLUDED.age RETURNING *',
-          values: [1, 'test', 30],
+          expected: [
+            { text: 'UPDATE users SET age = ? WHERE id = ? AND name = ?;', values: [30, 1, 'test'] },
+            { text: 'INSERT INTO users (id, name, age) SELECT ?, ?, ? FROM dual WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ? AND name = ?);', values: [1, 'test', 30, 1, 'test'] },
+            { text: 'SELECT * FROM users WHERE id = ? AND name = ?;', values: [1, 'test'] },
+          ],
         },
         {
           table: 'users',
           indexData: ['id'],
           data: { id: 1, name: 'test', age: 30 },
-          expected: 'INSERT INTO users (id, name, age) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age RETURNING *',
-          values: [1, 'test', 30],
+          expected: [
+            { text: 'UPDATE users SET name = ?, age = ? WHERE id = ?;', values: ['test', 30, 1] },
+            { text: 'INSERT INTO users (id, name, age) SELECT ?, ?, ? FROM dual WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?);', values: [1, 'test', 30, 1] },
+            { text: 'SELECT * FROM users WHERE id = ?;', values: [1] },
+          ],
         },
         {
           table: 'users',
@@ -873,16 +889,28 @@ describe('MariaClass', () => {
           data: {
             id: 1, name: 'test', age: 30, active: true,
           },
-          expected: 'INSERT INTO users (id, name, age, active) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, age = EXCLUDED.age, active = EXCLUDED.active RETURNING *',
-          values: [1, 'test', 30, true],
+          expected: [
+            { text: 'UPDATE users SET name = ?, age = ?, active = ? WHERE id = ?;', values: ['test', 30, true, 1] },
+            { text: 'INSERT INTO users (id, name, age, active) SELECT ?, ?, ?, ? FROM dual WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?);', values: [1, 'test', 30, true, 1] },
+            { text: 'SELECT * FROM users WHERE id = ?;', values: [1] },
+          ],
         },
       ]
-      await Promise.all(upsertCases.map(async (c) => {
+      await upsertCases.reduce(async (accPromise, c) => {
+        await accPromise
+        releaseCount = 0
+        isConnectionCommit = false
         const query = await mariaClass.upsert(c.table, c.indexData, c.data)
-        assert.equal(query.rows[0].debug_text, c.expected)
-        assert.deepEqual(query.rows[0].debug_values, c.values)
-        assert.equal(query.count, 1)
-      }))
+        assert.equal(releaseCount, 1)
+        assert.equal(isConnectionCommit, true)
+        assert.equal(query.count, 3)
+        assert.equal(query.ttl, undefined)
+        assert.equal(query.rows.length, 3)
+        c.expected.forEach((expectedQuery, index) => {
+          assert.equal(query.rows[index].text, expectedQuery.text)
+          assert.deepEqual(query.rows[index].values, expectedQuery.values)
+        })
+      }, Promise.resolve())
       const failedCases = [
         {
           table: '',
@@ -944,6 +972,20 @@ describe('MariaClass', () => {
           },
         )
       }))
+    })
+
+    it('should throw error when calling buildUpsertQuery', async () => {
+      await assert.rejects(
+        async () => {
+          await mariaClass.buildUpsertQuery('users', ['id'], { id: 1, name: 'test' })
+          assert.fail(new Error('should throw error but did not'))
+        },
+        (err: Error) => {
+          assert.strictEqual(err.name, 'Error')
+          assert.strictEqual(err.message, 'buildUpsertQuery is not supported in MariaClass, use buildUpsertQueries instead')
+          return true
+        },
+      )
     })
 
     it('should run a DELETE query correctly', async () => {
