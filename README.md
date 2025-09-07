@@ -80,17 +80,15 @@ The key in redis will be dbCache:${sha256 hash of the raw query}
 If data should come from database instead of cache, set _getLatest to true.
 
 ## Supporting databases, caches and message queues
-Database clients supported: pg (PostgreSQL, using mainly pg pool), mariadb (MariaDB or MySQL, using mariadb pool), mssql (Microsoft SQL)
+Database clients supported: pg (PostgreSQL, using mainly pg pool), mariadb (MariaDB or MySQL, using mariadb pool), sqlite (SQLite, using sqlite3)
 Cache clients supported: ioredis (Redis), redis (Redis)
 Message queue clients supported: kafka (Kafka, using kafkajs)
 
 ## TODO
 Unit test cases
-Currently this only support postgresSQL connection using node-postgres, redis connection using ioredis, kafka queue using kafkajs.
-Support of other databases / noSQL database, nodecache for caching, and RabbitMQ as message queue.
 Support of db transaction when message queue is used to centralize db writes.
 
-Databases pending to support: MySQL (MariaDB), MSSQL, Aurora DSQL, Oracle, SQLite
+Databases pending to support: MSSQL, Aurora DSQL, Oracle
 
 Cache pending to support: node-cache, memcached, Valkey
 

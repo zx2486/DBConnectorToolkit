@@ -44,6 +44,7 @@
     "mariadb": "^3.4.5",
     "pg": "^8.13.1",
     "redis": "^4.7.0",
+    "sqlite3": "^5.1.7",
     "uuid": "^11.0.3"
   },
   "devDependencies": {

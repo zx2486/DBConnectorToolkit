@@ -67,17 +67,19 @@ QueryOrder = { field: string, is_asc: boolean }
 
 DBConfig type, it defines the structure of a database config.
 
-client: string, it defines the type of database client, e.g. 'pg', 'mysql'.
+client: string, it defines the type of database client, e.g. 'pg', 'mysql', 'sqlite3'.
 
 Actual implementation depends on the database type.
+
+(SQLite3 does not support pool and ports, multiple databases and login, so these options are ignored in sqlite implementation)
 ```typescript
 DBConfig = {
   client: string,
   endpoint: string,
-  port: number,
-  database: string,
-  username: string,
-  password: string,
+  port?: number,
+  database?: string,
+  username?: string,
+  password?: string,
   ssl?: boolean,
   logLevel?: string,
   idleTimeoutMillis?: number,

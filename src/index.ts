@@ -3,6 +3,7 @@ import type {
 } from './baseClass'
 import PgClass from './pgClass'
 import MariaClass from './mariaClass'
+import SQLite3Class from './sqlite3Class'
 
 import RedisClass from './redisClass'
 import IORedisClass from './ioredisClass'
@@ -26,6 +27,7 @@ const getDBObj = (_dbConfig?: DBConfig): PgClass | undefined => {
   const supportClasss = new Map<string, typeof PgClass>([
     ['pg', PgClass],
     ['mariadb', MariaClass],
+    ['sqlite3', SQLite3Class],
   ])
   if (!_dbConfig || !_dbConfig.client
     || !supportClasss.has(_dbConfig.client)) {
