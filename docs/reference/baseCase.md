@@ -13,6 +13,7 @@ Query = {
 
 QueryResult type, defines the structure of a query result.
 It contains the rows, count and ttl of the query. ttl is defined only if it comes from cache.
+ttl is in seconds, -1 means no expiry, 0 means key does not exist
 ```typescript
 QueryResult = {
   rows: any[]
@@ -171,7 +172,7 @@ pingInterval, slotsRefreshTimeout, slotsRefreshInterval only works with redis, n
 ```typescript
 CacheConfig = {
   client: string,
-  url: string,
+  url?: string,
   additionalNodeList?: string[],
   username?: string,
   password?: string,
@@ -191,6 +192,7 @@ CacheConfig = {
   logLevel?: string,
   slotsRefreshTimeout?: number, // timeout on topology refresh, only work with cluster is true
   slotsRefreshInterval?: number, // inteval on topology refresh, only work with cluster is true
+  dnsLookup: ((_address: string, _callback: any) => any) | undefined,
 }
 ```
 

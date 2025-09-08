@@ -15,6 +15,7 @@ export type Query = {
 /**
  * QueryResult type, defines the structure of a query result
  * It contains the rows, count and ttl of the query. ttl is defined only if it comes from cache
+ * ttl is in seconds, -1 means no expiry, 0 means key does not exist
  */
 export type QueryResult = {
   rows: any[]
@@ -156,15 +157,16 @@ export interface DBClass {
 
 /**
  * Basic CacheConfig type, it defines the structure of a cache config.
- * client: string, it defines the type of cache client, e.g. 'redis', 'nodecache'
+ * client: string, it defines the type of cache client, e.g. 'redis', 'ioredis', 'nodecache'
  * Actual implementation depends on the cache type. Times are in seconds.
  * reconnectOnError only works with ioredis, it will determine whether to reconnect on error.
  * pingInterval is the interval to ping the cache server to keep the connection alive.
  * pingInterval, slotsRefreshTimeout, slotsRefreshInterval only works with redis, not ioredis.
+ * pingInterval also work with nodecache
  */
 export type CacheConfig = {
   client: string,
-  url: string,
+  url?: string,
   additionalNodeList?: string[],
   username?: string,
   password?: string,

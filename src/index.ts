@@ -7,14 +7,17 @@ import SQLite3Class from './sqlite3Class'
 
 import RedisClass from './redisClass'
 import IORedisClass from './ioredisClass'
+import NodeCacheClass from './nodeCacheClass'
 import DBConnectorClass from './dbConnectorClass'
 import KafkaClass from './kafkaClass'
 
 const getCacheObj = (_cacheConfig?: CacheConfig): CacheClass | undefined => {
-  const supportClasss = new Map<string, typeof RedisClass | typeof IORedisClass>([
-    ['redis', RedisClass],
-    ['ioredis', IORedisClass],
-  ])
+  const supportClasss = new Map<string,
+    typeof RedisClass | typeof IORedisClass | typeof NodeCacheClass>([
+      ['redis', RedisClass],
+      ['ioredis', IORedisClass],
+      ['nodecache', NodeCacheClass],
+    ])
   if (!_cacheConfig || !_cacheConfig.client
     || !supportClasss.has(_cacheConfig.client)) {
     return undefined
