@@ -40,7 +40,17 @@ export default class SQLite3Class extends SQLClass {
       // it will connect to db itself, just return
       return
     }
-    throw new Error('Failed to connect to database')
+    const db = new sqlite3.Database(this.getConfig().endpoint)
+    // Override the pool query method to match the expected interface
+    db.query = (text: string, values: any[]) => new Promise((resolve, reject) => {
+      db.all(text, values, (err: any, rows: any[]) => {
+        if (err) {
+          return reject(err)
+        }
+        return resolve(rows)
+      })
+    })
+    this.pool = db
   }
 
   async disconnect() {
@@ -56,17 +66,10 @@ export default class SQLite3Class extends SQLClass {
     }
   }
 
-  // Extends the getRawClient method as it is connection in mariadb
   async getRawClient(): Promise<any> {
-    try {
-      return this.pool // There is no pool in sqlite3
-    } catch (err) {
-      this.logger.error({ event: 'SQLite3 - getRawClient', err })
-      throw new Error('Failed to get db client')
-    }
+    return this.pool // There is no pool in sqlite3
   }
 
-  // Extends the transaction method to use mariadb pool
   async transaction(_callbacks: (
     (_previousResult: QueryResult, _client: any) => Promise<QueryResult>
   )[]): Promise<QueryResult> {

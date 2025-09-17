@@ -36,7 +36,7 @@ export default class MemcachedClass implements CacheClass {
   async connect() {
     try {
       if (!this.cacheClient) {
-        const newClient = new Memcached('localhost:11211', { ...this.cacheConfig })
+        const newClient = new Memcached(this.targetServer, { ...this.cacheConfig })
         newClient.on('issue', (details: any) => {
           this.logger.info({ event: 'Issue with server', ...details })
         })

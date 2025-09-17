@@ -1,7 +1,7 @@
 dbConnectorClass
 ================
 
-An implementation of the DBClass interface, the `dbConnectorClass` is designed for external use to manage database operations. It provides methods for connecting to the database, executing queries, and handling transactions. The class supports both master and replica databases, allowing for efficient read and write operations.
+An implementation of the `DBClass` interface, the `dbConnectorClass` is designed for external use to manage database operations. It provides methods for connecting to the database, executing queries, and handling transactions. The class supports both master and replica databases, allowing for efficient read and write operations.
 
 In this implementation, most methods will go back to the query function (write calls will have _isWrite = true).
 When message queue is not present, write calls will always go to master database.
