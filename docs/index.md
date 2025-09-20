@@ -31,13 +31,3 @@ Versioning
 When a feature is built and merged into development, the version will be updated by prerelease snapshot.
 When a release is going to happen, things will be merged into main. 
 The version will be set mannually and a new tag will be created and package will be published.
-
-Contents
---------
-
-.. toctree::
-   :maxdepth: 2
-   
-   gettingstarted
-   usage
-   reference

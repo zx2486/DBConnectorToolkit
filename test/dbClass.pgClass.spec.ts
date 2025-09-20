@@ -4,7 +4,8 @@ import {
 } from 'mocha'
 import sinon from 'ts-sinon'
 import { Pool } from 'pg'
-import PgClass from '../src/dbClass' // Adjust the path as needed
+import SQLClass from '../src/dbClass' // Adjust the path as needed
+import PgClass from '../src/pgClass' // Adjust the path as needed
 
 const selectCases = [
   {
@@ -76,14 +77,14 @@ const selectCases = [
   },
 ]
 
-describe('PgClass', () => {
+describe('SQLClass', () => {
   describe('Static validation methods', () => {
     it('should validate identifiers correctly', () => {
       // Valid identifiers
       const validIdentifiers = ['valid_identifier', 'u.user_id', '*', 'u', 'user_profiles']
       validIdentifiers.forEach((id) => {
         try {
-          PgClass.validateIdentifier(id)
+          SQLClass.validateIdentifier(id)
         } catch (e) {
           assert.fail(`Should not throw error on ${id}`)
         }
@@ -96,7 +97,7 @@ describe('PgClass', () => {
         'user; SELECT 1;',
       ]
       invalidIdentifiers.forEach((c) => {
-        assert.throws(() => PgClass.validateIdentifier(c), new Error(`Invalid identifier: ${c}`))
+        assert.throws(() => SQLClass.validateIdentifier(c), new Error(`Invalid identifier: ${c}`))
       })
     })
 
@@ -105,7 +106,7 @@ describe('PgClass', () => {
       const validIdentifiers = ['=', '!=', '<', '<=', '>', '>=', '<>']
       validIdentifiers.forEach((id) => {
         try {
-          PgClass.validateComparator(id)
+          SQLClass.validateComparator(id)
         } catch (e) {
           assert.fail(`Should not throw error on ${id}`)
         }
@@ -114,7 +115,7 @@ describe('PgClass', () => {
       // Invalid comparators
       const invalidIdentifiers = ['===', '!<', '><', '', '!==', '!>', '!>=', '!<=']
       invalidIdentifiers.forEach((c) => {
-        assert.throws(() => PgClass.validateComparator(c), new Error(`Invalid comparator: ${c}`))
+        assert.throws(() => SQLClass.validateComparator(c), new Error(`Invalid comparator: ${c}`))
       })
     })
     */
@@ -124,7 +125,7 @@ describe('PgClass', () => {
       const validIdentifiers = [123, 'active', true]
       validIdentifiers.forEach((id) => {
         try {
-          PgClass.validateValue(id)
+          SQLClass.validateValue(id)
         } catch (e) {
           assert.fail(`Should not throw error on ${id}`)
         }
@@ -133,7 +134,7 @@ describe('PgClass', () => {
       // Invalid values
       const invalidIdentifiers = [[], () => { }, undefined]
       invalidIdentifiers.forEach((c) => {
-        assert.throws(() => PgClass.validateValue(c), new Error('Invalid value'))
+        assert.throws(() => SQLClass.validateValue(c), new Error('Invalid value'))
       })
     })
 
@@ -142,7 +143,7 @@ describe('PgClass', () => {
       const validIdentifiers = ['INNER', 'LEFT', 'RIGHT', 'FULL']
       validIdentifiers.forEach((id) => {
         try {
-          PgClass.validateJoinType(id)
+          SQLClass.validateJoinType(id)
         } catch (e) {
           assert.fail(`Should not throw error on ${id}`)
         }
@@ -151,7 +152,7 @@ describe('PgClass', () => {
       // Invalid join types
       const invalidIdentifiers = ['OUTER', 'CROSS', '', 'INNER JOIN']
       invalidIdentifiers.forEach((c) => {
-        assert.throws(() => PgClass.validateJoinType(c), new Error(`Invalid join type: ${c}`))
+        assert.throws(() => SQLClass.validateJoinType(c), new Error(`Invalid join type: ${c}`))
       })
     })
   })
@@ -267,7 +268,7 @@ describe('PgClass', () => {
         assert.strictEqual(err.message, 'Failed to connect to database')
         return true
       })
-      assert(loggerStub.error.calledWith({ event: 'PGPool - connect', err: error }))
+      assert(loggerStub.error.calledWith({ event: 'Pool - connect', err: error }))
     })
 
     it('should log an error and throw when get raw client fails', async () => {
@@ -282,7 +283,7 @@ describe('PgClass', () => {
         assert.strictEqual(err.message, 'Failed to get db client')
         return true
       })
-      assert(loggerStub.error.calledWith({ event: 'PGPool - getRawClient', err: error }))
+      assert(loggerStub.error.calledWith({ event: 'Pool - getRawClient', err: error }))
     })
 
     it('should disconnect from the database', async () => {
@@ -308,7 +309,7 @@ describe('PgClass', () => {
         assert.strictEqual(err.message, 'Failed to disconnect from database')
         return true
       })
-      assert(loggerStub.error.calledWith({ event: 'PGPool - disconnect', err: error }))
+      assert(loggerStub.error.calledWith({ event: 'Pool - disconnect', err: error }))
     })
 
     it('should check isconnect to the database', async () => {
@@ -320,7 +321,7 @@ describe('PgClass', () => {
       poolStub.query.rejects(error)
       loggerStub.error.resetHistory()
       assert(!(await pgClass.isconnect()))
-      assert(loggerStub.error.calledWith({ event: 'PGPool - isconnect', err: error }))
+      assert(loggerStub.error.calledWith({ event: 'Pool - isconnect', err: error }))
     })
 
     it('should connect to database when it is not when calling query', async () => {

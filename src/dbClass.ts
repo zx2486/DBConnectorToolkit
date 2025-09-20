@@ -1,44 +1,23 @@
-import bunyan from 'bunyan'
 import { v4 as uuidv4 } from 'uuid'
-import { Pool } from 'pg'
+
 import type {
   Query, DBConfig, DBClass, TableWithJoin, QueryCondition, QueryOrder, QueryData,
   QueryResult,
 } from './baseClass'
 
-export default class PgClass implements DBClass {
+export default class SQLClass implements DBClass {
   private dbConfig: DBConfig
-  private pool: any
-  private clients: { [key: string]: any } = {}
-  private logger: any
+  protected pool: any
+  protected clients: { [key: string]: any } = {}
+  protected logger: any
+  protected usingQuestionMarkInQuery: boolean = false
+  protected canReturnInUpdate: boolean = true
 
-  constructor(dbConfig: DBConfig) {
-    if (!dbConfig || dbConfig.client !== 'pg' || !dbConfig.endpoint || !dbConfig.port || !dbConfig.database || !dbConfig.username || !dbConfig.password) {
-      throw new Error('Invalid DB config')
-    }
+  constructor(dbConfig: DBConfig, pool: any, logger: any) {
     this.dbConfig = dbConfig
-    this.logger = bunyan.createLogger({
-      name: 'PgClass',
-      streams: [{ stream: process.stderr, level: dbConfig.logLevel as bunyan.LogLevel }],
-    })
-    const connectionString = `postgres://${dbConfig.username}:${dbConfig.password}@${dbConfig.endpoint}:${dbConfig.port}/${dbConfig.database}`
-    const pathname = `${dbConfig.endpoint}:${dbConfig.port}/${dbConfig.database}`
-
+    this.pool = pool
+    this.logger = logger
     this.clients = []
-    const options = {
-      connectionString,
-      idleTimeoutMillis: this.dbConfig.idleTimeoutMillis ?? 10,
-      min: this.dbConfig.minConnection ?? 1,
-      max: this.dbConfig.maxConnection ?? 10,
-      allowExitOnIdle: this.dbConfig.allowExitOnIdle ?? true,
-    }
-    this.pool = new Pool(options)
-      .on('error', (err: any) => { this.logger.error({ event: 'PGPool - constructor - error', pathname, err }) })
-      .on('connect', () => { this.logger.info({ event: 'PGPool - constructor - connect', connectionCount: this.pool.totalCount, pathname }) })
-      .on('acquire', () => { this.logger.info({ event: 'PGPool - constructor - acquire', pathname }) })
-      .on('release', () => { this.logger.info({ event: 'PGPool - constructor - release', pathname }) })
-      .on('remove', () => { this.logger.info({ event: 'PGPool - constructor - remove', connectionCount: this.pool.totalCount, pathname }) })
-    this.logger.info({ event: `Pool (${this.dbConfig.endpoint}:${this.dbConfig.port}) is ready` })
   }
 
   getConfig(): DBConfig {
@@ -51,7 +30,7 @@ export default class PgClass implements DBClass {
       // only used by transaction
       this.clients[clientId] = await this.pool.connect()
     } catch (err) {
-      this.logger.error({ event: 'PGPool - connect', err })
+      this.logger.error({ event: 'Pool - connect', err })
       throw new Error('Failed to connect to database')
     }
   }
@@ -60,14 +39,17 @@ export default class PgClass implements DBClass {
     try {
       await Promise.all(Object.keys(this.clients).map(async (id) => {
         if (Object.prototype.hasOwnProperty.call(this.clients, id)) {
-          await this.clients[id].removeAllListeners()
+          // test if removeAllListeners is available before calling
+          if (typeof this.clients[id].removeAllListeners === 'function') {
+            await this.clients[id].removeAllListeners()
+          }
           await this.clients[id].release()
           delete this.clients[id]
         }
       }))
       await this.pool.end()
     } catch (err) {
-      this.logger.error({ event: 'PGPool - disconnect', err })
+      this.logger.error({ event: 'Pool - disconnect', err })
       throw new Error('Failed to disconnect from database')
     }
   }
@@ -77,18 +59,32 @@ export default class PgClass implements DBClass {
       await this.pool.query('SELECT 1')
       return true
     } catch (err) {
-      this.logger.error({ event: 'PGPool - isconnect', err })
+      this.logger.error({ event: 'Pool - isconnect', err })
       return false
     }
   }
 
   async query(_query: Query, _isWrite: boolean = false, _getLatest: boolean = false) {
-    if (!(await this.isconnect())) {
+    if (!(await this.isconnect()) && typeof this.pool.connect === 'function') {
       await this.pool.connect()
     }
     try {
-      const result = await this.pool.query(_query.text, _query.values)
-      return { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
+      const queryText = (this.usingQuestionMarkInQuery)
+        ? _query.text.replace(/\$[\d]+/g, '?') // replace all $1,$2... with ? to avoid issues with mariadb
+        : _query.text
+      const result = await this.pool.query(queryText, _query.values)
+      if (result && result.rows && result.rowCount) {
+        return { rows: result.rows, count: result.rowCount || 0, ttl: undefined }
+      }
+      if (Array.isArray(result)) {
+        // if result is an array, return it as rows
+        return { rows: result, count: result.length || 0, ttl: undefined }
+      }
+      if (typeof result === 'object' && result !== null && 'affectedRows' in result) {
+        return { rows: [], count: result.affectedRows || 0, ttl: undefined }
+      }
+      // Other cases
+      return { rows: [], count: 0, ttl: undefined }
     } catch (err) {
       this.logger.error({ event: 'query', err })
       // throw new Error('Invalid SQL query')
@@ -102,7 +98,7 @@ export default class PgClass implements DBClass {
       this.clients[clientId] = await this.pool.connect()
       return this.clients[clientId]
     } catch (err) {
-      this.logger.error({ event: 'PGPool - getRawClient', err })
+      this.logger.error({ event: 'Pool - getRawClient', err })
       throw new Error('Failed to get db client')
     }
   }
@@ -161,7 +157,7 @@ export default class PgClass implements DBClass {
     }
   }
 
-  static queryConditionToString = (
+  queryConditionToString = (
     _conditions: { array: QueryCondition[], is_or: boolean },
     valueCount: number = 0,
   ): { condition: string, conditionV: any[] } => {
@@ -171,39 +167,46 @@ export default class PgClass implements DBClass {
         { field: string, comparator: string, value: any }[] = _conditions.array.map((c) => {
           if (Array.isArray(c) && c.length === 3) {
             // example use case: ['field', '=', 'value']
-            PgClass.validateIdentifier(c[0])
+            SQLClass.validateIdentifier(c[0])
             if (!/^(=|!=|<>|<|<=|>|>=|LIKE|ILIKE)$/.test(c[1])) {
               throw new Error(`Invalid comparator: ${c[1]}`)
             }
-            PgClass.validateValue(c[2])
+            SQLClass.validateValue(c[2])
             return { field: c[0], comparator: c[1], value: c[2] }
           }
           if (Array.isArray(c) && c.length === 2) {
             // example use case: ['field', 'value'], or ['field', 'IS NULL']
-            PgClass.validateIdentifier(c[0])
+            SQLClass.validateIdentifier(c[0])
             if (typeof c[1] === 'string'
               && /^(IS|IS NOT) (NULL|TRUE|FALSE|UNKNOWN)$/.test(c[1])) {
               return { field: c[0], comparator: c[1], value: '' }
             }
-            PgClass.validateValue(c[1])
+            SQLClass.validateValue(c[1])
             return { field: c[0], comparator: '=', value: c[1] }
           }
           // if c is an object { field: string, comparator: string, value: any }
           if (typeof c === 'object' && typeof c.field === 'string') {
-            PgClass.validateIdentifier(c.field)
+            SQLClass.validateIdentifier(c.field)
             if (c.comparator) {
               if (!/^(=|!=|<>|<|<=|>|>=|LIKE|ILIKE)$/.test(c.comparator)) {
                 throw new Error(`Invalid comparator: ${c.comparator}`)
               }
             }
-            PgClass.validateValue(c.value)
+            SQLClass.validateValue(c.value)
             return { field: c.field, comparator: c.comparator || '=', value: c.value }
           }
           throw new Error(`Invalid condition: ${JSON.stringify(c)}`)
         })
       if (conditionStrict.length > 0) {
+        const questionMarkOrDollarSign = (value: any) => {
+          if (this.usingQuestionMarkInQuery) {
+            conditionV.push(value)
+            return ' ?'
+          }
+          return ` $${conditionV.push(value) + valueCount}`
+        }
         return {
-          condition: ` WHERE ${conditionStrict.map((c) => `${c.field} ${c.comparator || '='}${(c.value) ? ` $${conditionV.push(c.value) + valueCount}` : ''}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`,
+          condition: ` WHERE ${conditionStrict.map((c) => `${c.field} ${c.comparator || '='}${(c.value) ? questionMarkOrDollarSign(c.value) : ''}`).join(`${_conditions.is_or ? ' OR ' : ' AND '}`)}`,
           conditionV,
         }
       }
@@ -237,23 +240,23 @@ export default class PgClass implements DBClass {
     }
     // Validate table names and fields
     _table.forEach((t) => {
-      PgClass.validateIdentifier(t.table)
-      if (t.name) PgClass.validateIdentifier(t.name)
+      SQLClass.validateIdentifier(t.table)
+      if (t.name) SQLClass.validateIdentifier(t.name)
     })
     if (_table.length > 1) {
       _table.slice(1).forEach((t) => {
         if (!t.on || t.on.length < 1 || !t.join_type) {
           throw new Error('Invalid query: TABLES without JOIN and ON')
         }
-        PgClass.validateJoinType(t.join_type)
+        SQLClass.validateJoinType(t.join_type)
         t.on.forEach(({ left, right }) => {
-          PgClass.validateIdentifier(left)
-          PgClass.validateIdentifier(right)
+          SQLClass.validateIdentifier(left)
+          SQLClass.validateIdentifier(right)
         })
       })
     }
 
-    _fields.forEach(PgClass.validateIdentifier)
+    _fields.forEach(SQLClass.validateIdentifier)
 
     const fieldQuery: string = `SELECT ${_fields.join(', ')} FROM `
     // Write the table and join part of the query
@@ -262,11 +265,11 @@ export default class PgClass implements DBClass {
       tableQuery += _table.slice(1).map((t) => ` ${t.join_type ? `${t.join_type} JOIN` : ''} ${t.table}${t.name ? ` AS ${t.name}` : ''} ON ${t.on ? t.on.map(({ left, right }) => `${left} = ${right}`).join(' AND ') : 'TRUE'}`).join('')
     }
     const values: any[] = []
-    const { condition, conditionV } = (_conditions) ? PgClass.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
+    const { condition, conditionV } = (_conditions) ? this.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
     values.push(...conditionV)
     let order = ''
     if (_order && _order.length > 0) {
-      _order.forEach((o) => PgClass.validateIdentifier(o.field))
+      _order.forEach((o) => SQLClass.validateIdentifier(o.field))
       order = ` ORDER BY ${_order.map((o) => `${o.field} ${o.is_asc ? 'ASC' : 'DESC'}`).join(', ')}`
     }
     // Validate limit and offset
@@ -279,12 +282,18 @@ export default class PgClass implements DBClass {
     let limit = ''
     if (_limit) {
       if (!Number.isInteger(_limit) || _limit < 0) { throw new Error('Invalid limit value') }
-      limit = ` LIMIT $${values.push(_limit)}`
+      if (this.usingQuestionMarkInQuery) {
+        limit = ' LIMIT ?'
+        values.push(_limit)
+      } else limit = ` LIMIT $${values.push(_limit)}`
     }
     let offset = ''
     if (_offset) {
       if (!Number.isInteger(_offset) || _offset < 0) { throw new Error('Invalid offset value') }
-      offset = ` OFFSET $${values.push(_offset)}`
+      if (this.usingQuestionMarkInQuery) {
+        offset = ' OFFSET ?'
+        values.push(_offset)
+      } else offset = ` OFFSET $${values.push(_offset)}`
     }
     const query: Query = { text: `${fieldQuery}${tableQuery}${condition}${order}${limit}${offset}`, values }
     // Do not validate query for now to save time
@@ -324,19 +333,19 @@ export default class PgClass implements DBClass {
       })
       throw new Error('Invalid query')
     }
-    PgClass.validateIdentifier(_table)
+    SQLClass.validateIdentifier(_table)
     const fieldSet = new Set() // Check for duplicate fields
     data.forEach((singleData) => {
       const { field, value } = singleData
-      PgClass.validateIdentifier(field)
-      PgClass.validateValue(value)
+      SQLClass.validateIdentifier(field)
+      SQLClass.validateValue(value)
       if (fieldSet.has(field)) {
         throw new Error('Duplicate field in data')
       }
       fieldSet.add(field)
     })
     const fieldQuery: string = `INSERT INTO ${_table} (${data.map(({ field }) => field).join(', ')})`
-    const valueQuery: string = `VALUES (${data.map((_value, i) => `$${i + 1}`).join(', ')})`
+    const valueQuery: string = `VALUES (${data.map((_value, i) => ((this.usingQuestionMarkInQuery) ? '?' : `$${i + 1}`)).join(', ')})`
     const values: any[] = data.map(({ value }) => value)
     const query: Query = { text: `${fieldQuery} ${valueQuery} RETURNING *`, values }
     return query
@@ -367,11 +376,11 @@ export default class PgClass implements DBClass {
       })
       throw new Error('Invalid conditions')
     }
-    PgClass.validateIdentifier(_table)
+    SQLClass.validateIdentifier(_table)
     const fieldSet = new Set() // Check for duplicate fields
     data.forEach(({ field, value }) => {
-      PgClass.validateIdentifier(field)
-      PgClass.validateValue(value)
+      SQLClass.validateIdentifier(field)
+      SQLClass.validateValue(value)
       if (fieldSet.has(field)) {
         this.logger.error({
           event: 'buildUpdateQuery', error: 'Invalid query', table: _table, data: _data, conditions: _conditions,
@@ -381,12 +390,19 @@ export default class PgClass implements DBClass {
       fieldSet.add(field)
     })
 
-    const fieldQuery: string = `UPDATE ${_table} SET ${data.map(({ field }, i) => `${field} = $${i + 1}`).join(', ')}`
+    const fieldQuery: string = `UPDATE ${_table} SET ${data.map(({ field }, i) => ((this.usingQuestionMarkInQuery) ? `${field} = ?` : `${field} = $${i + 1}`)).join(', ')}`
     const values: any[] = data.map(({ value }) => value)
-    const { condition, conditionV } = (_conditions) ? PgClass.queryConditionToString(_conditions, values.length) : { condition: '', conditionV: [] }
+    const { condition, conditionV } = (_conditions) ? this.queryConditionToString(_conditions, values.length) : { condition: '', conditionV: [] }
     values.push(...conditionV)
 
-    const query: Query = { text: `${fieldQuery}${condition} RETURNING *`, values }
+    // If the system cannot support returning updated rows
+    // return empty rows instead
+    const query: Query = {
+      text: (this.canReturnInUpdate)
+        ? `${fieldQuery}${condition} RETURNING *`
+        : `${fieldQuery}${condition}`,
+      values,
+    }
     return query
   }
 
@@ -410,12 +426,12 @@ export default class PgClass implements DBClass {
       })
       throw new Error('Invalid query')
     }
-    PgClass.validateIdentifier(_table)
-    _indexData.forEach(PgClass.validateIdentifier)
+    SQLClass.validateIdentifier(_table)
+    _indexData.forEach(SQLClass.validateIdentifier)
     const fieldSet = new Set() // Check for duplicate fields
     data.forEach(({ field, value }) => {
-      PgClass.validateIdentifier(field)
-      PgClass.validateValue(value)
+      SQLClass.validateIdentifier(field)
+      SQLClass.validateValue(value)
       if (fieldSet.has(field)) {
         throw new Error('Duplicate field in data')
       }
@@ -433,12 +449,19 @@ export default class PgClass implements DBClass {
       throw new Error('No data fields to update')
     }
     const fieldQuery: string = `INSERT INTO ${_table} (${data.map(({ field }) => field).join(', ')})`
-    const valueQuery: string = `VALUES (${data.map((_value, i) => `$${i + 1}`).join(', ')})`
+    const valueQuery: string = `VALUES (${data.map((_value, i) => ((this.usingQuestionMarkInQuery) ? '?' : `$${i + 1}`)).join(', ')})`
     const conflictQuery: string = `ON CONFLICT (${_indexData.join(', ')}) DO UPDATE SET ${excludedFields
       .map(({ field }) => `${field} = EXCLUDED.${field}`)
       .join(', ')}`
     const values: any[] = data.map(({ value }) => value)
-    const query: Query = { text: `${fieldQuery} ${valueQuery} ${conflictQuery} RETURNING *`, values }
+    // If the system cannot support returning updated rows
+    // return empty rows instead
+    const query: Query = {
+      text: (this.canReturnInUpdate)
+        ? `${fieldQuery} ${valueQuery} ${conflictQuery} RETURNING *`
+        : `${fieldQuery} ${valueQuery} ${conflictQuery}`,
+      values,
+    }
     return query
   }
 
@@ -463,7 +486,7 @@ export default class PgClass implements DBClass {
       })
       throw new Error('Invalid query')
     }
-    PgClass.validateIdentifier(_table)
+    SQLClass.validateIdentifier(_table)
     if (!_conditions || !_conditions.array || _conditions.array.length < 1) {
       this.logger.error({
         event: 'buildDeleteQuery', error: 'Invalid query', table: _table, conditions: _conditions,
@@ -471,7 +494,7 @@ export default class PgClass implements DBClass {
       throw new Error('Invalid conditions')
     }
     const values: any[] = []
-    const { condition, conditionV } = (_conditions) ? PgClass.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
+    const { condition, conditionV } = (_conditions) ? this.queryConditionToString(_conditions) : { condition: '', conditionV: [] }
     values.push(...conditionV)
 
     const query: Query = { text: `DELETE FROM ${_table}${condition} RETURNING *`, values }

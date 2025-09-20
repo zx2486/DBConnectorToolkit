@@ -1,25 +1,10 @@
 import type {
-  DBConfig, CacheConfig, DBClass, CacheClass, QueueConfig,
+  DBConfig, CacheConfig, DBClass, QueueConfig,
 } from './baseClass'
-import PgClass from './dbClass'
-
-import RedisClass from './redisClass'
-import IORedisClass from './ioredisClass'
 import DBConnectorClass from './dbConnectorClass'
 import KafkaClass from './kafkaClass'
 
-const getCacheObj = (_cacheConfig?: CacheConfig): CacheClass | undefined => {
-  const supportClasss = new Map<string, typeof RedisClass | typeof IORedisClass>([
-    ['redis', RedisClass],
-    ['ioredis', IORedisClass],
-  ])
-  if (!_cacheConfig || !_cacheConfig.client
-    || !supportClasss.has(_cacheConfig.client)) {
-    return undefined
-  }
-  const CacheClassConstructor = supportClasss.get(_cacheConfig.client)
-  return (CacheClassConstructor) ? new CacheClassConstructor(_cacheConfig) : undefined
-}
+import { getCacheObj, getDBObj } from './indexInternal'
 
 /**
  * Main entry point for database connection.
@@ -40,12 +25,16 @@ const dbConnector = (
   cacheConfig?: CacheConfig,
   msgQueueConfig?: QueueConfig,
 ): DBClass => {
-  if (!masterConfig || masterConfig.client !== 'pg') {
-    throw new Error('Master DB config is required and must be a PostgreSQL config')
+  if (!masterConfig) {
+    throw new Error('Master DB config is required')
   }
-  const masterDB = new PgClass(masterConfig)
+  const masterDB = getDBObj(masterConfig)
+  if (!masterDB) {
+    throw new Error('Invalid Master DB config')
+  }
   const replicaDB = (replicaConfig && replicaConfig.length > 0)
-    ? replicaConfig.filter(({ client }) => client === 'pg').map((config) => new PgClass(config)) : []
+    ? replicaConfig.map((config) => getDBObj(config))
+      .filter((db) => db !== undefined) : []
   const redis = getCacheObj(cacheConfig)
   const msgQueue = (msgQueueConfig && msgQueueConfig.client === 'kafka') ? new KafkaClass(msgQueueConfig) : undefined
   return new DBConnectorClass(masterDB, replicaDB, redis, msgQueue)
