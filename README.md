@@ -70,7 +70,7 @@ const cacheConfig = {
     client: 'ioredis',
     url: 'localhost@6379',
     dbIndex: 1, // database index, default is 0
-    cacheHeader: 'dbCache'
+    cacheHeader: 'dbCache:' // optional, default is dbCache:
 }
 db = dbConnector(masterDBConfig, replicaDBConfig, cacheConfig);
 ```
@@ -79,11 +79,20 @@ The key in redis will be dbCache:${sha256 hash of the raw query}
 
 If data should come from database instead of cache, set _getLatest to true.
 
+## Supporting databases, caches and message queues
+Database clients supported: pg (PostgreSQL, using mainly pg pool), mariadb (MariaDB or MySQL, using mariadb pool), sqlite (SQLite, using sqlite3)
+Cache clients supported: ioredis (Redis), redis (Redis), nodecache (node-cache), memcached (memcached)
+Message queue clients supported: kafka (Kafka, using kafkajs)
+
 ## TODO
 Unit test cases
-Currently this only support postgresSQL connection using node-postgres, redis connection using ioredis, kafka queue using kafkajs.
-Support of other databases / noSQL database, nodecache for caching, and RabbitMQ as message queue.
 Support of db transaction when message queue is used to centralize db writes.
+
+Databases pending to support: MSSQL, Aurora DSQL, Oracle
+
+Cache pending to support: Valkey
+
+Message queue pending to support: Amazon MSK, rabbitMQ, Amazon Simple Queue Service SQS
 
 ## Contributing
 If you want to contribute to this project, please submit a pull request or create an issue for discussion. 

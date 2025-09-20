@@ -15,6 +15,7 @@ export type Query = {
 /**
  * QueryResult type, defines the structure of a query result
  * It contains the rows, count and ttl of the query. ttl is defined only if it comes from cache
+ * ttl is in seconds, -1 means no expiry, 0 means key does not exist
  */
 export type QueryResult = {
   rows: any[]
@@ -78,10 +79,10 @@ export type QueryOrder = { field: string, is_asc: boolean }
 export type DBConfig = {
   client: string,
   endpoint: string,
-  port: number,
-  database: string,
-  username: string,
-  password: string,
+  port?: number,
+  database?: string,
+  username?: string,
+  password?: string,
   ssl?: boolean,
   logLevel?: string,
   idleTimeoutMillis?: number,
@@ -156,34 +157,39 @@ export interface DBClass {
 
 /**
  * Basic CacheConfig type, it defines the structure of a cache config.
- * client: string, it defines the type of cache client, e.g. 'redis', 'nodecache'
+ * client: string, it defines the type of cache client,
+ * e.g. 'redis', 'ioredis', 'nodecache', 'memcached'
  * Actual implementation depends on the cache type. Times are in seconds.
  * reconnectOnError only works with ioredis, it will determine whether to reconnect on error.
  * pingInterval is the interval to ping the cache server to keep the connection alive.
  * pingInterval, slotsRefreshTimeout, slotsRefreshInterval only works with redis, not ioredis.
+ * pingInterval also work with nodecache and memcached.
+ * In memcached, it will be used as the time between reconnection attempts.
+ * keepAlive in memcached will be used as the the idle timeout
  */
 export type CacheConfig = {
   client: string,
-  url: string,
+  url?: string,
   additionalNodeList?: string[],
   username?: string,
   password?: string,
-  dbIndex?: number,
+  dbIndex?: number, // only works with redis and ioredis
   cacheHeader?: string,
   cacheTTL?: number,
-  revalidate?: number,
+  revalidate?: number, // time to revalidate in background, not work with memcached
   pingInterval?: number,
   connectTimeout?: number,
   keepAlive?: number,
-  reconnectStrategy?: (_retries: number) => number,
-  reconnectOnError?: (_err: any) => boolean,
-  disableOfflineQueue?: boolean,
-  tls?: boolean | object,
-  checkServerIdentity?: any,
-  cluster?: boolean,
+  reconnectStrategy?: (_retries: number) => number, // only works with redis and ioredis
+  reconnectOnError?: (_err: any) => boolean, // only works with ioredis
+  disableOfflineQueue?: boolean, // only works with redis and ioredis
+  tls?: boolean | object, // tls options or true to enable tls, only works with redis and ioredis
+  checkServerIdentity?: any, // function to check server identity, only works with redis and ioredis
+  cluster?: boolean, // only works with redis and ioredis
   logLevel?: string,
   slotsRefreshTimeout?: number, // timeout on topology refresh, only work with cluster is true
   slotsRefreshInterval?: number, // inteval on topology refresh, only work with cluster is true
+  dnsLookup?: ((_address: string, _callback: any) => any) | undefined, // only works with ioredis
 }
 
 /**
@@ -191,6 +197,8 @@ export type CacheConfig = {
  * One may get data using query, and build cache using buildCache.
  * _query is used as the key to the data
  * getPoolClient provides a raw client for transaction operations.
+ * QueryResult.ttl is in seconds, -1 means no expiry, 0 means key does not exist.
+ * For memcached, ttl is always -1 as cannot get ttl
  */
 export interface CacheClass {
   connect(): Promise<void>
@@ -198,7 +206,7 @@ export interface CacheClass {
   isconnect(): Promise<boolean>
   getConfig(): any
   getPoolClient(): Promise<any>
-  query(_query: Query): Promise<QueryResult>
+  query(_query: Query): Promise<QueryResult | undefined>
   buildCache(_query: Query, _result: QueryResult): Promise<void>
   clearCache(_query: Query): Promise<void>
   clearAllCache(): Promise<void>

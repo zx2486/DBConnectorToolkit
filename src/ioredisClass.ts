@@ -52,17 +52,17 @@ export default class IORedisClass implements CacheClass {
     if (_config.username && _config.password) {
       this.cacheConfig.options.username = _config.username
       this.cacheConfig.options.password = _config.password
-      // if _config.tls is a function, assign it directly,
-      // if it is a boolean, set tls to a default object
-      const configTls = _config.tls
-      if (configTls === true || typeof configTls === 'object') {
-        this.cacheConfig.options.tls = (typeof configTls === 'object')
-          ? configTls : {
-            // skip certificate hostname validation
-            // eslint-disable-next-line no-unused-vars
-            checkServerIdentity: () => undefined,
-          }
-      }
+    }
+    // if _config.tls is a function, assign it directly,
+    // if it is a boolean, set tls to a default object
+    const configTls = _config.tls
+    if (configTls === true || typeof configTls === 'object') {
+      this.cacheConfig.options.tls = (typeof configTls === 'object')
+        ? configTls : {
+          // skip certificate hostname validation
+          // eslint-disable-next-line no-unused-vars
+          checkServerIdentity: () => undefined,
+        }
     }
     if (_config.cluster) {
       this.cacheConfig.options.clusterRetryStrategy = (_config.reconnectStrategy)
@@ -71,6 +71,9 @@ export default class IORedisClass implements CacheClass {
       this.cacheConfig.options.slotsRefreshTimeout = _config.slotsRefreshTimeout
         ? _config.slotsRefreshTimeout * 1000 : 1000
       this.cacheConfig.options.scaleReads = 'all'
+    }
+    if (_config.dnsLookup) {
+      this.cacheConfig.options.dnsLookup = _config.dnsLookup
     }
   }
 

@@ -223,8 +223,19 @@ export default class DBConnectorClass implements DBClass {
 
   async upsert(_table: string, _indexData: string[], _data: Object) {
     // return this.masterDB.upsert(_table, _indexData, _data)
-    const query = this.buildUpsertQuery(_table, _indexData, _data)
-    return this.query(query, true)
+    try {
+      // if the masterDB supports upsert in one statement, use it
+      const query = this.buildUpsertQuery(_table, _indexData, _data)
+      return this.query(query, true)
+    } catch (err) {
+      // if the masterDB does not support upsert in one statement,
+      // use multiple insert/update queries
+      if (this.msgQueue && this.msgQueue.isconnect(true)) {
+        // TODO: how to support transaction with message queue?
+        throw new Error('Cannot do transaction (from upsert) while message queue is connected')
+      }
+      return this.masterDB.upsert(_table, _indexData, _data)
+    }
   }
 
   async delete(
