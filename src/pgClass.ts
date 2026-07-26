@@ -25,6 +25,7 @@ export default class PgClass extends SQLClass {
       min: dbConfig.minConnection ?? 1,
       max: dbConfig.maxConnection ?? 10,
       allowExitOnIdle: dbConfig.allowExitOnIdle ?? true,
+      ssl: dbConfig.ssl ?? false,
     }
     const pool = new Pool(options)
       .on('error', (err: any) => { this.logger.error({ event: 'PGPool - constructor - error', pathname, err }) })
