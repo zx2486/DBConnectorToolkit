@@ -4,7 +4,7 @@ The main purpose is to reduce code changes on application with growing traffic a
 
 Documentation is available at [https://dbconnectortoolkit.readthedocs.io](https://dbconnectortoolkit.readthedocs.io).
 
-We have created a demo project ([DBConnectorSampleWeb](https://github.com/zx2486/DBConnectorSampleWeb)) and a demo site ([dbconnectorapi.authpaper.com](https://dbconnectorapi.authpaper.com)) to illustrate how this library works.
+We have created a demo project ([DBConnectorSampleWeb](https://github.com/zx2486/DBConnectorSampleWeb)) and a demo site ([dbconnectordemo.authpaper.com](https://dbconnectordemo.authpaper.com)) to illustrate how this library works.
 
 ## Installation
 ```bash
